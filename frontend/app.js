@@ -1,5 +1,5 @@
 // 前端流程占位实现：开始界面 -> 选择模式（随机/普通）-> 后续动作。
-// TODO: 将占位逻辑替换为真实 HTTP/WebSocket 请求，调用 chart_analysis / chart_engine / Quartus。
+// 需要后端提供 chart_engine / chart_analysis 接口。
 
 const state = {
   started: false,
@@ -227,17 +227,37 @@ function selectChart(chart, cardEl) {
   if (els.previewMeta) els.previewMeta.textContent = `已选中：${chart.name} · 点击下方按钮写入 BPM & ROM 或打开 Quartus。`;
 }
 
-function applyNormalSelection() {
+async function applyNormalSelection() {
   if (!state.selectedChart) {
     showToast("请先选中曲目");
     return;
   }
-  // TODO: 调用 chart_engine 写入 ROM.v 和 BPM，调用 chart_analysis 获取最新分析图。
-  showToast(`已请求写入：${state.selectedChart.name}`);
+  const name = state.selectedChart.name;
+  if (els.normalStatus) els.normalStatus.textContent = `调用 chart_engine 处理中：${name}...`;
+  const ok = await runChartEngine(name);
+  if (ok) {
+    showToast(`写入成功：${name}`);
+    if (els.normalStatus) els.normalStatus.textContent = `写入成功：${name}`;
+  } else {
+    showToast(`写入失败：${name}`);
+    if (els.normalStatus) els.normalStatus.textContent = `写入失败：${name}`;
+  }
+}
+
+async function runChartEngine(chartName) {
+  const url = `${BASE_PATH}chart_engine/process?name=${encodeURIComponent(chartName)}`;
+  try {
+    const res = await fetch(url, { method: "POST" });
+    if (!res.ok) throw new Error(`process failed: ${res.status}`);
+    const data = await res.json().catch(() => ({}));
+    return data.success === true;
+  } catch (err) {
+    console.warn("runChartEngine failed", err);
+    return false;
+  }
 }
 
 function openQuartus() {
-  // TODO: 调用后端在 quartus/MuseDash.qsf 上启动 Quartus，或提示用户手动打开。
   showToast("打开 Quartus：quartus/MuseDash.qsf");
 }
 
@@ -246,14 +266,14 @@ function generateRandomChart() {
   if (els.btnStartRandom) els.btnStartRandom.disabled = true;
   if (els.randomPreview) els.randomPreview.innerHTML = "";
   if (els.randomData) els.randomData.textContent = "等待 chart_analysis 输出 summary JSON";
-  // TODO: 调用 chart_engine 生成 Random 谱面，并调用 chart_analysis 生成分析图。
-  setTimeout(async () => {
+  (async () => {
+    const ok = await runGenerateRandom();
     state.randomReady = true;
     if (els.btnStartRandom) els.btnStartRandom.disabled = false;
-    if (els.randomStatus) els.randomStatus.textContent = "生成完成，点击开始或重新生成。";
+    if (els.randomStatus) els.randomStatus.textContent = ok ? "生成完成，点击开始或重新生成。" : "生成失败，仍可尝试开始或重试生成。";
     await loadRandomPreview();
-    showToast("Random 谱面生成完成（占位）");
-  }, 400);
+    showToast(ok ? "Random 谱面生成完成" : "Random 谱面生成失败（占位）");
+  })();
 }
 
 function startRandomBuild() {
@@ -261,12 +281,23 @@ function startRandomBuild() {
     showToast("请先生成 Random 谱面");
     return;
   }
-  // TODO: 写入 Random 的 BPM & ROM，然后启动 Quartus。
   showToast("Random 模式：已请求写入并启动");
 }
 
+async function runGenerateRandom() {
+  const url = `${BASE_PATH}chart_engine/generate_random`;
+  try {
+    const res = await fetch(url, { method: "POST" });
+    if (!res.ok) throw new Error(`generate_random failed: ${res.status}`);
+    const data = await res.json().catch(() => ({}));
+    return data.success === true;
+  } catch (err) {
+    console.warn("runGenerateRandom failed", err);
+    return false;
+  }
+}
+
 async function loadRandomPreview() {
-  // 尝试从协议里读取名为 "Random" 的文件列表和 summary。
   try {
     const res = await fetch(PROTOCOL_URL);
     if (!res.ok) throw new Error(`protocol fetch failed: ${res.status}`);
@@ -297,7 +328,6 @@ function bindEvents() {
 
 function init() {
   bindEvents();
-  // 初始提示。
   renderPreviewImages([], els.previewImages);
   renderSummary(null, els.previewData);
   renderPreviewImages([], els.randomPreview);
@@ -307,7 +337,6 @@ function init() {
 init();
 
 function detectBasePath() {
-  // 自动推导 MuseDash 根路径（兼容 http 服务和 file:// 直接打开）
   const loc = window.location;
   const pathname = loc.pathname.replace(/\\/g, "/");
   const parts = pathname.split("/");
@@ -319,7 +348,6 @@ function detectBasePath() {
   if (loc.origin && loc.origin !== "null") {
     return `${loc.origin}${base}`;
   }
-  // file:// 情况
   return `file://${base}`;
 }
 
