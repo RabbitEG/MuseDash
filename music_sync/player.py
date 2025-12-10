@@ -10,7 +10,7 @@ import pygame
 import keyboard
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FALLBACK_TICK = os.path.join(BASE_DIR, "assets", "tick.mp3") # 这个还没有，要放入一个节拍tick.mp3音频在目录MuseDash/music_sync/assets下
+FALLBACK_TICK = os.path.join(BASE_DIR, "assets", "default.mp3")
 
 if not os.path.isfile(FALLBACK_TICK):
     print(f"[WARN] 回退节拍文件不存在: {os.path.abspath(FALLBACK_TICK)}")
