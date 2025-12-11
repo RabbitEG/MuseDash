@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MuseDash 前端</title>
+  <title>Muse Dash On FPGA</title>
   <style>
     :root {
       --accent: #ff6b9b;
@@ -125,8 +125,8 @@
     .track-list {
       display: grid;
       grid-auto-flow: column;
-      grid-auto-columns: 220px;
-      gap: 12px;
+      grid-auto-columns: minmax(360px, max-content);
+      gap: 14px;
       overflow-x: auto;
       padding: 6px 2px 12px;
     }
@@ -135,12 +135,13 @@
       padding: 14px;
       background: rgba(255,255,255,0.05);
       border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
       cursor: pointer;
       transition: transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      min-height: 120px;
     }
     .track-card:hover {
-      transform: scale(1.06);
+      transform: scale(1.03);
       border-color: rgba(255,255,255,0.2);
       box-shadow: 0 12px 26px rgba(0,0,0,0.25);
     }
@@ -148,8 +149,35 @@
       outline: 2px solid var(--accent);
       box-shadow: 0 12px 26px rgba(255,107,155,0.3);
     }
+    .track-content {
+      display: grid;
+      grid-template-columns: 1fr 160px;
+      gap: 12px;
+      align-items: flex-start;
+    }
     .track-name { font-size: 16px; font-weight: 700; }
     .track-meta { font-size: 13px; color: var(--text-sub); margin-top: 6px; }
+    .track-images {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+    }
+    .track-images img, .track-image-placeholder {
+      height: 120px;
+      width: 160px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, rgba(255,107,155,0.18), rgba(90,200,250,0.18));
+      border: 1px solid rgba(255,255,255,0.08);
+      object-fit: cover;
+    }
+    .track-image-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-sub);
+      font-size: 13px;
+      padding: 0 10px;
+    }
     .preview {
       margin-top: 10px;
       padding: 14px;
@@ -163,8 +191,10 @@
       background: rgba(255,255,255,0.03);
       border-radius: 10px;
       border: 1px solid rgba(255,255,255,0.06);
-      color: var(--text-sub);
-      font-size: 13px;
+      color: var(--text-main);
+      font-size: 14px;
+      line-height: 1.6;
+      font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
       white-space: pre-wrap;
       max-height: 180px;
       overflow: auto;
@@ -172,24 +202,25 @@
     .preview-meta { font-size: 14px; color: var(--text-sub); }
     .preview-images {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(auto-fill, minmax(256px, 1fr)); /* 缩到 4/5，保证一行放下更多图 */
+      gap: 12px;
       margin-top: 12px;
     }
     .preview-images img, .placeholder-box {
       width: 100%;
-      height: 120px;
-      border-radius: 10px;
+      height: 192px; /* 约为原来的 4/5 */
+      border-radius: 12px;
       background: linear-gradient(135deg, rgba(255,107,155,0.18), rgba(90,200,250,0.18));
       border: 1px solid rgba(255,255,255,0.08);
-      object-fit: cover;
+      object-fit: contain; /* 避免裁剪轴标题 */
+      padding: 6px;       /* 给坐标轴留白 */
     }
     .placeholder-box {
       display: flex;
       align-items: center;
       justify-content: center;
       color: var(--text-sub);
-      font-size: 13px;
+      font-size: 14px;
     }
     .action-row {
       display: flex;
@@ -226,7 +257,7 @@
     <div class="scrim"></div>
     <div class="content">
       <div id="startOverlay" class="start-overlay">
-        <div class="start-title">MuseDash 前端</div>
+        <div class="start-title">Muse Dash On FPGA</div>
         <div class="start-sub">点击任意位置开始游戏</div>
       </div>
 
