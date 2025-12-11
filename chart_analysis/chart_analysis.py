@@ -8,15 +8,53 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 import sys
 
+# 字体放大倍率
+FONT_SCALE = 2.0
+
+
+def fs(base: float) -> int:
+    """按照倍率放大字体尺寸"""
+    return int(round(base * FONT_SCALE))
+
+
+def fs_smaller(base: float, delta: int = 4) -> int:
+    """在放大的基础上进一步缩小字号"""
+    return max(1, fs(base) - delta)
+
+
+# 谱面时间刻度：每拍分成多少单位（默认 1/4 拍为一个时间单位）
+TICKS_PER_BEAT = 4
+
+
+def ticks_to_seconds(ticks: float, bpm: float) -> float:
+    """将谱面时间刻度转换为秒"""
+    if not bpm:
+        return 0.0
+    return ticks / TICKS_PER_BEAT * 60.0 / bpm
+
+
+# 音符类型的中文标签
+NOTE_TYPE_LABELS = {
+    'tap': '单击',
+    'hold_start': '长条',
+    'hold_end': '长按结束',
+    'hold_mid': '长按中段',
+}
+
 # 添加父目录到路径，以便导入 chart_engine
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from chart_engine.chart_engine import chart_check
 
 try:
-    import matplotlib.pyplot as plt
     import matplotlib
-    import numpy as np
     matplotlib.use('Agg')  # 使用非交互式后端
+    import matplotlib.pyplot as plt
+    import numpy as np
+    plt.rcParams.update({
+        'font.size': fs(11),
+        'font.sans-serif': ['Microsoft YaHei', 'SimHei', 'Arial'],
+        'axes.unicode_minus': False,
+    })
 except ImportError:
     print("警告: matplotlib 或 numpy 未安装，请运行: pip install -r requirements.txt")
     raise
@@ -201,14 +239,15 @@ class ChartVisualizer:
         if not filtered_types:
             # 如果没有数据，创建空图
             fig, ax = plt.subplots(figsize=(9, 6))  # 正方形，适配饼图
-            ax.text(0.5, 0.5, 'No data', ha='center', va='center', fontsize=16)
-            ax.set_title(f'{self.chart_name} - Note Count', fontsize=16, fontweight='bold', pad=20)
+            ax.text(0.5, 0.5, '暂无数据', ha='center', va='center', fontsize=fs(16))
+            ax.set_title('物量', fontsize=fs(16), fontweight='bold', pad=20)
             plt.savefig(output_path, dpi=150, bbox_inches=None)
             plt.close()
             return
         
-        labels = list(filtered_types.keys())
-        sizes = list(filtered_types.values())
+        type_keys = list(filtered_types.keys())
+        labels = [NOTE_TYPE_LABELS.get(label, label) for label in type_keys]
+        sizes = [filtered_types[key] for key in type_keys]
         
         # 使用更美观的配色方案
         color_map = {
@@ -216,10 +255,10 @@ class ChartVisualizer:
             'hold_start': '#4ECDC4',  # 青色
             'hold_end': '#45B7D1',    # 蓝色
         }
-        colors = [color_map.get(label, plt.cm.viridis(i/len(labels))) for i, label in enumerate(labels)]
+        colors = [color_map.get(label, plt.cm.viridis(i/len(type_keys))) for i, label in enumerate(type_keys)]
         
         # 设置中文字体支持（如果需要）
-        plt.rcParams['font.size'] = 11
+        plt.rcParams['font.size'] = fs(11)
         
         fig, ax = plt.subplots(figsize=(9, 6), facecolor='white')  # 正方形，适配饼图圆形显示
         
@@ -238,7 +277,7 @@ class ChartVisualizer:
             colors=colors,
             explode=[0.05] * len(labels),  # 分离各扇形
             shadow=True,
-            textprops={'fontsize': 12, 'fontweight': 'bold'},
+            textprops={'fontsize': fs(12), 'fontweight': 'bold'},
             pctdistance=0.85
         )
         
@@ -246,12 +285,12 @@ class ChartVisualizer:
         for autotext in autotexts:
             autotext.set_color('white')
             autotext.set_fontweight('bold')
-            autotext.set_fontsize(11)
+            autotext.set_fontsize(fs(11))
         
         # 设置标题
         ax.set_title(
-            f'{self.chart_name} - Note Count Distribution',
-            fontsize=16,
+            '物量类型数量分布',
+            fontsize=fs(16),
             fontweight='bold',
             pad=20,
             color='#2C3E50'
@@ -268,8 +307,8 @@ class ChartVisualizer:
         
         if not filtered_types:
             fig, ax = plt.subplots(figsize=(9, 6))  # 正方形，适配饼图
-            ax.text(0.5, 0.5, 'No data', ha='center', va='center', fontsize=16)
-            ax.set_title(f'{self.chart_name} - Note Density', fontsize=16, fontweight='bold', pad=20)
+            ax.text(0.5, 0.5, '暂无数据', ha='center', va='center', fontsize=fs(16))
+            ax.set_title('物量类型占比', fontsize=fs(16), fontweight='bold', pad=20)
             plt.savefig(output_path, dpi=150, bbox_inches=None)
             plt.close()
             return
@@ -277,14 +316,15 @@ class ChartVisualizer:
         total = sum(filtered_types.values())
         if total == 0:
             fig, ax = plt.subplots(figsize=(9, 6))  # 正方形，适配饼图
-            ax.text(0.5, 0.5, 'No data', ha='center', va='center', fontsize=16)
-            ax.set_title(f'{self.chart_name} - Note Density', fontsize=16, fontweight='bold', pad=20)
+            ax.text(0.5, 0.5, '暂无数据', ha='center', va='center', fontsize=fs(16))
+            ax.set_title('物量类型占比', fontsize=fs(16), fontweight='bold', pad=20)
             plt.savefig(output_path, dpi=150, bbox_inches=None)
             plt.close()
             return
         
-        labels = list(filtered_types.keys())
-        sizes = [v / total * 100 for v in filtered_types.values()]
+        type_keys = list(filtered_types.keys())
+        labels = [NOTE_TYPE_LABELS.get(label, label) for label in type_keys]
+        sizes = [filtered_types[key] / total * 100 for key in type_keys]
         
         # 使用更美观的配色方案
         color_map = {
@@ -292,7 +332,7 @@ class ChartVisualizer:
             'hold_start': '#4ECDC4',
             'hold_end': '#45B7D1',
         }
-        colors = [color_map.get(label, plt.cm.Pastel1(i/len(labels))) for i, label in enumerate(labels)]
+        colors = [color_map.get(label, plt.cm.Pastel1(i/len(type_keys))) for i, label in enumerate(type_keys)]
         
         # 使用固定的画布尺寸，不使用 bbox_inches='tight' 以保持固定比例
         fig, ax = plt.subplots(figsize=(9, 6), facecolor='white')  # 正方形，适配饼图圆形显示
@@ -306,7 +346,7 @@ class ChartVisualizer:
             colors=colors,
             explode=[0.05] * len(labels),
             shadow=True,
-            textprops={'fontsize': 12, 'fontweight': 'bold'},
+            textprops={'fontsize': fs(12), 'fontweight': 'bold'},
             pctdistance=0.85
         )
         
@@ -314,11 +354,11 @@ class ChartVisualizer:
         for autotext in autotexts:
             autotext.set_color('white')
             autotext.set_fontweight('bold')
-            autotext.set_fontsize(11)
+            autotext.set_fontsize(fs(11))
         
         ax.set_title(
-            f'{self.chart_name} - Note Type Percentage',
-            fontsize=16,
+            '物量类型占比',
+            fontsize=fs(16),
             fontweight='bold',
             pad=20,
             color='#2C3E50'
@@ -335,23 +375,28 @@ class ChartVisualizer:
         
         if not density_curve:
             fig, ax = plt.subplots(figsize=(9, 6))  # 3:2 比例，适配前端
-            ax.text(0.5, 0.5, 'No data', ha='center', va='center', fontsize=16)
-            ax.set_title(f'{self.chart_name} - Density Curve', fontsize=14, fontweight='bold')
-            ax.set_xlabel('Time', fontsize=12)
-            ax.set_ylabel('Note Density', fontsize=12)
+            ax.text(0.5, 0.5, '暂无数据', ha='center', va='center', fontsize=fs(16))
+            ax.set_title('物量密度曲线', fontsize=fs(14), fontweight='bold')
+            ax.set_xlabel('时间（秒）', fontsize=fs(12))
+            ax.set_ylabel('物量密度', fontsize=fs(12))
             plt.savefig(output_path, dpi=150, bbox_inches='tight')
             plt.close()
             return
         
         times = sorted(density_curve.keys())
         densities = [density_curve[t] for t in times]
+        bpm = self.stats.get('bpm', 0) or 0
+        window_size = max(100, self.stats.get('duration', 0) // 100)
+        window_seconds = ticks_to_seconds(window_size, bpm)
+        times_sec = [ticks_to_seconds(t, bpm) for t in times]
+        densities_per_sec = [d / window_seconds if window_seconds else 0 for d in densities]
         
         fig, ax = plt.subplots(figsize=(9, 6), facecolor='white')  # 3:2 比例，适配前端
-        ax.plot(times, densities, linewidth=2.5, color='#2E86AB', marker='o', markersize=3, alpha=0.8)
-        ax.fill_between(times, densities, alpha=0.3, color='#2E86AB')
-        ax.set_title(f'{self.chart_name} - Density Curve', fontsize=16, fontweight='bold', pad=15, color='#2C3E50')
-        ax.set_xlabel('Time', fontsize=13, fontweight='bold')
-        ax.set_ylabel('Note Density (notes per time window)', fontsize=13, fontweight='bold')
+        ax.plot(times_sec, densities_per_sec, linewidth=2.5, color='#2E86AB', marker='o', markersize=3, alpha=0.8)
+        ax.fill_between(times_sec, densities_per_sec, alpha=0.3, color='#2E86AB')
+        ax.set_title('物量密度曲线', fontsize=fs(16), fontweight='bold', pad=15, color='#2C3E50')
+        ax.set_xlabel('时间（秒）', fontsize=fs(13), fontweight='bold')
+        ax.set_ylabel('物量密度', fontsize=fs(13), fontweight='bold')
         ax.grid(True, alpha=0.3, linestyle='--')
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
@@ -365,8 +410,8 @@ class ChartVisualizer:
         
         if not track_dist:
             fig, ax = plt.subplots(figsize=(9, 6))  # 3:2 比例，适配前端
-            ax.text(0.5, 0.5, 'No data', ha='center', va='center', fontsize=16)
-            ax.set_title(f'{self.chart_name} - Track Distribution', fontsize=16, fontweight='bold', pad=20)
+            ax.text(0.5, 0.5, '暂无数据', ha='center', va='center', fontsize=fs(16))
+            ax.set_title('轨道分布', fontsize=fs(16), fontweight='bold', pad=20)
             plt.savefig(output_path, dpi=150, bbox_inches='tight')
             plt.close()
             return
@@ -399,20 +444,21 @@ class ChartVisualizer:
                 f'{int(height)}',
                 ha='center',
                 va='bottom',
-                fontsize=12,
+                fontsize=fs(12),
                 fontweight='bold'
             )
         
         ax.set_title(
-            f'{self.chart_name} - Track Distribution',
-            fontsize=16,
+            '轨道分布',
+            fontsize=fs(16),
             fontweight='bold',
             pad=20,
             color='#2C3E50'
         )
-        ax.set_xlabel('Track', fontsize=13, fontweight='bold')
-        ax.set_ylabel('Note Count', fontsize=13, fontweight='bold')
+        ax.set_xlabel('轨道', fontsize=fs(13), fontweight='bold')
+        ax.set_ylabel('物量', fontsize=fs(13), fontweight='bold')
         ax.set_xticks(tracks)
+        ax.set_xticklabels([f'轨道{t}' for t in tracks])
         ax.grid(True, alpha=0.3, axis='y', linestyle='--')
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
@@ -424,11 +470,14 @@ class ChartVisualizer:
     def generate_time_distribution_chart(self, output_path: Path):
         """生成音符时间分布直方图"""
         time_dist = self.stats['time_distribution']
+        bpm = self.stats.get('bpm', 0) or 0
         
         if not time_dist:
             fig, ax = plt.subplots(figsize=(9, 6))  # 3:2 比例，适配前端
-            ax.text(0.5, 0.5, 'No data', ha='center', va='center', fontsize=16)
-            ax.set_title(f'{self.chart_name} - Time Distribution', fontsize=16, fontweight='bold', pad=20)
+            ax.text(0.5, 0.5, '暂无数据', ha='center', va='center', fontsize=fs(16))
+            ax.set_title('物量时间分布', fontsize=fs(16), fontweight='bold', pad=20)
+            ax.set_xlabel('时间（秒）', fontsize=fs(13), fontweight='bold')
+            ax.set_ylabel('物量', fontsize=fs(13), fontweight='bold')
             plt.savefig(output_path, dpi=150, bbox_inches='tight')
             plt.close()
             return
@@ -436,12 +485,13 @@ class ChartVisualizer:
         duration = self.stats['duration']
         # 根据时长动态调整 bins 数量
         num_bins = min(50, max(20, duration // 50))
+        time_dist_sec = [ticks_to_seconds(t, bpm) for t in time_dist]
         
         fig, ax = plt.subplots(figsize=(9, 6), facecolor='white')  # 3:2 比例，适配前端
         
         # 绘制直方图，使用渐变色
         n, bins, patches = ax.hist(
-            time_dist,
+            time_dist_sec,
             bins=num_bins,
             color='#4ECDC4',
             edgecolor='white',
@@ -454,14 +504,14 @@ class ChartVisualizer:
             patch.set_facecolor(plt.cm.viridis(i / len(patches)))
         
         ax.set_title(
-            f'{self.chart_name} - Note Time Distribution',
-            fontsize=16,
+            '物量时间分布',
+            fontsize=fs(16),
             fontweight='bold',
             pad=20,
             color='#2C3E50'
         )
-        ax.set_xlabel('Time', fontsize=13, fontweight='bold')
-        ax.set_ylabel('Note Count', fontsize=13, fontweight='bold')
+        ax.set_xlabel('时间（秒）', fontsize=fs(13), fontweight='bold')
+        ax.set_ylabel('物量数量', fontsize=fs(13), fontweight='bold')
         ax.grid(True, alpha=0.3, axis='y', linestyle='--')
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
@@ -473,16 +523,19 @@ class ChartVisualizer:
     def generate_difficulty_curve_chart(self, output_path: Path):
         """生成难度曲线分析图"""
         difficulty_curve = self.stats['difficulty_curve']
+        bpm = self.stats.get('bpm', 0) or 0
         
         if not difficulty_curve:
             fig, ax = plt.subplots(figsize=(9, 6))  # 3:2 比例，适配前端
-            ax.text(0.5, 0.5, 'No data', ha='center', va='center', fontsize=16)
-            ax.set_title(f'{self.chart_name} - Difficulty Curve', fontsize=16, fontweight='bold', pad=20)
+            ax.text(0.5, 0.5, '暂无数据', ha='center', va='center', fontsize=fs(16))
+            ax.set_title('难度曲线', fontsize=fs(16), fontweight='bold', pad=20)
+            ax.set_xlabel('时间（秒）', fontsize=fs(13), fontweight='bold')
             plt.savefig(output_path, dpi=150, bbox_inches='tight')
             plt.close()
             return
         
         times = sorted(difficulty_curve.keys())
+        times_sec = [ticks_to_seconds(t, bpm) for t in times]
         difficulties = [difficulty_curve[t] for t in times]
         
         # 计算平均难度和峰值
@@ -492,38 +545,38 @@ class ChartVisualizer:
         fig, ax = plt.subplots(figsize=(9, 6), facecolor='white')  # 3:2 比例，适配前端
         
         # 绘制难度曲线，使用渐变色
-        ax.plot(times, difficulties, linewidth=2.5, color='#E74C3C', alpha=0.8, label='Difficulty')
-        ax.fill_between(times, difficulties, alpha=0.3, color='#E74C3C')
+        ax.plot(times_sec, difficulties, linewidth=2.5, color='#E74C3C', alpha=0.8, label='难度')
+        ax.fill_between(times_sec, difficulties, alpha=0.3, color='#E74C3C')
         
         # 添加平均难度线
         ax.axhline(y=avg_difficulty, color='#3498DB', linestyle='--', linewidth=2, 
-                   label=f'Average: {avg_difficulty:.2f}', alpha=0.7)
+                   label=f'平均值: {avg_difficulty:.2f}', alpha=0.7)
         
         # 标记峰值
         peak_idx = difficulties.index(peak_difficulty)
-        peak_time = times[peak_idx]
-        ax.plot(peak_time, peak_difficulty, 'ro', markersize=10, label=f'Peak: {peak_difficulty:.2f}')
+        peak_time = times_sec[peak_idx]
+        ax.plot(peak_time, peak_difficulty, 'ro', markersize=10, label=f'峰值: {peak_difficulty:.2f}')
         ax.annotate(
-            f'Peak: {peak_difficulty:.2f}',
+            f'峰值: {peak_difficulty:.2f}',
             xy=(peak_time, peak_difficulty),
             xytext=(10, 10),
             textcoords='offset points',
-            fontsize=11,
+            fontsize=fs_smaller(11),
             fontweight='bold',
             bbox=dict(boxstyle='round,pad=0.5', facecolor='yellow', alpha=0.7),
             arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0')
         )
         
         ax.set_title(
-            f'{self.chart_name} - Difficulty Curve Analysis',
-            fontsize=16,
+            '难度曲线分析',
+            fontsize=fs(16),
             fontweight='bold',
             pad=20,
             color='#2C3E50'
         )
-        ax.set_xlabel('Time', fontsize=13, fontweight='bold')
-        ax.set_ylabel('Difficulty Score', fontsize=13, fontweight='bold')
-        ax.legend(loc='upper right', fontsize=11, framealpha=0.9)
+        ax.set_xlabel('时间（秒）', fontsize=fs(13), fontweight='bold')
+        ax.set_ylabel('难度评分', fontsize=fs(13), fontweight='bold')
+        ax.legend(loc='upper right', fontsize=fs_smaller(11), framealpha=0.9)
         ax.grid(True, alpha=0.3, linestyle='--')
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)

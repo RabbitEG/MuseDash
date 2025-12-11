@@ -317,15 +317,22 @@ function toNotesPerSecond(val, duration, bpm, isAvg = false) {
   const windowSeconds = windowSize * secondsPerTick;
   if (windowSeconds <= 0) return `${val}`;
   const perSec = val / windowSeconds;
-  const rounded = isAvg ? Math.round(perSec * 10) / 10 : Math.round(perSec * 100) / 100;
-  return rounded.toFixed(isAvg ? 1 : 2);
+  const rounded = Math.round(perSec * 100) / 100;
+  return rounded.toFixed(2);
 }
 
 function formatNoteTypes(noteTypes) {
   if (!noteTypes || typeof noteTypes !== "object") return "";
+  const labelMap = {
+    tap: "单击",
+    hold_start: "长条头",
+    hold_mid: "长条中段",
+    hold_end: "长按结束",
+  };
   const parts = [];
   for (const [k, v] of Object.entries(noteTypes)) {
-    parts.push(`${v} ${k}`);
+    const label = labelMap[k] || k;
+    parts.push(`${v} ${label}`);
   }
   return parts.join("，");
 }
