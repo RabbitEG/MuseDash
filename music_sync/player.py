@@ -1,6 +1,6 @@
 """
 主要接口：listen_and_play(chart_path_or_audio_path)
-调用后监听键盘，按下空格立即播放对应音乐（无音乐时播放默认节拍）。
+调用后监听键盘，按下空格立即播放对应音乐（无音乐时播放节拍）。
 """
 import os
 import time
@@ -10,14 +10,13 @@ import pygame
 import keyboard
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FALLBACK_TICK = os.path.join(BASE_DIR, "assets", "default.mp3")
-
-if not os.path.isfile(FALLBACK_TICK):
-    print(f"[WARN] 回退节拍文件不存在: {os.path.abspath(FALLBACK_TICK)}")
+DEFAULT = os.path.join(BASE_DIR, "assets", "default.mp3")
+if not os.path.isfile(DEFAULT):
+    print(f"[WARN] 回退节拍文件不存在: {os.path.abspath(DEFAULT)}")
 
 pygame_inited = False
 def _init_pygame():
-    """初始化 pygame mixer（仅初始化一次）"""
+    """ 初始化pygame mixer,仅初始化一次 """
     global pygame_inited
     if not pygame_inited:
         try:
@@ -28,7 +27,7 @@ def _init_pygame():
             pygame_inited = False
 
 def _play_async(path):
-    """异步播放（用 pygame 播放 MP3），避免阻塞键盘监听。"""
+    """ pygame播放MP3,避免阻塞键盘监听 """
     if not os.path.exists(path):
         print(f"[ERROR] 音频文件不存在：{path}")
         return
@@ -52,20 +51,19 @@ def listen_and_play(chart_name):
     if os.path.isfile(chart_name):
         audio_path = chart_name
     else:
-        # 视为曲目名
-        folder = os.path.join("charts", chart_name)
+        folder = os.path.abspath(os.path.join(BASE_DIR, "..", "charts", chart_name))
         audio = os.path.join(folder, f"{chart_name}.mp3")
-        print("charts", audio)
+        print(f"[INFO] 查找曲目音频路径: {audio}")
         if os.path.exists(audio):
             print(f"[INFO] 使用曲目音频：{audio}")
             audio_path = audio
         # 回退
         else: 
-            print(f"[WARN] 未找到音频 {audio}，回退播放节拍：{FALLBACK_TICK}")
-            audio_path = FALLBACK_TICK    
+            print(f"[WARN] 未找到音频，回退播放节拍：{DEFAULT}")
+            audio_path = DEFAULT    
 
     print("\n=== Music Sync Start ===")
-    print(f"按空格播放音频{audio_path}，按 Ctrl+C 退出\n")
+    print(f"按空格播放音频，按 Ctrl+C 退出\n")
     try:
         while True:
             if keyboard.is_pressed("space"):
@@ -75,8 +73,6 @@ def listen_and_play(chart_name):
             time.sleep(0.01)
     except KeyboardInterrupt:
         print("\n退出监听。")
-    # raise NotImplementedError("音乐播放逻辑尚未实现。")
-
 
 def main():
     """
