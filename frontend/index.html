@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Muse Dash On FPGA</title>
+  <link rel="icon" href="assets/favicon.ico" />
   <style>
     :root {
       --accent: #ff6b9b;
@@ -258,22 +259,22 @@
     <div class="content">
       <div id="startOverlay" class="start-overlay">
         <div class="start-title">Muse Dash On FPGA</div>
-        <div class="start-sub">点击任意位置开始游戏</div>
+        <div class="start-sub">点击任意位置开始</div>
       </div>
 
       <div id="normalPanel" class="panel hidden">
         <div class="panel-header">
-          <div class="panel-title">普通模式 · 请选择谱面：</div>
+          <div class="panel-title">请选择谱面：</div>
           <div id="normalStatus" class="status">等待加载谱面...</div>
         </div>
         <div id="trackList" class="track-list"></div>
         <div class="preview">
-          <div id="previewMeta" class="preview-meta">将鼠标悬停在曲目卡片上即可放大并预览。</div>
+          <div id="previewMeta" class="preview-meta">将鼠标悬停在曲目卡片上即可放大并预览音乐。</div>
           <div id="previewImages" class="preview-images"></div>
-          <pre id="previewData" class="summary-box">等待 chart_analysis 输出 summary JSON</pre>
+          <pre id="previewData" class="summary-box">谱面信息生成中...</pre>
           <div id="normalActions" class="action-row" style="display:none;">
-            <button id="btn-select-normal" class="btn">写入 BPM & ROM</button>
-            <button id="btn-open-quartus" class="btn secondary">打开 Quartus（MuseDash.qsf）</button>
+            <button id="btn-select-normal" class="btn">写入谱面信息</button>
+            <button id="btn-open-quartus" class="btn secondary">将谱面载入到 FPGA</button>
           </div>
         </div>
       </div>
@@ -281,16 +282,16 @@
       <div id="randomPanel" class="panel hidden">
         <div class="panel-header">
           <div class="panel-title">随机模式</div>
-          <div id="randomStatus" class="status">等待生成 Random 谱面...</div>
+          <div id="randomStatus" class="status">等待生成随机谱面...</div>
         </div>
         <div class="action-row">
           <button id="btn-generate-random" class="btn">重新生成</button>
           <button id="btn-start-random" class="btn secondary" disabled>开始（写入后启动）</button>
         </div>
         <div class="preview" style="margin-top:12px;">
-          <div class="preview-meta">生成后将展示 chart_analysis 的分析图。</div>
+          <div class="preview-meta">生成后将展示谱面分析图。</div>
           <div id="randomPreview" class="preview-images"></div>
-          <pre id="randomData" class="summary-box">等待生成 Random 分析数据</pre>
+          <pre id="randomData" class="summary-box">等待生成随机谱面分析数据</pre>
         </div>
       </div>
 
