@@ -1,1 +1,2 @@
-# TODO: 选定绘图库后添加依赖（如 matplotlib / plotly / seaborn）。
+matplotlib>=3.5.0
+numpy>=1.21.0
