@@ -1,0 +1,374 @@
+\documentclass[12pt, a4paper]{article}
+
+\usepackage[fontset=fandol]{ctex} 
+
+% --- 常用数学与图形包 ---
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{geometry}
+\geometry{left=2.5cm, right=2.5cm, top=2.5cm, bottom=2.5cm}
+
+% --- 代码高亮设置 (使用 listings，轻量级) ---
+\usepackage{listings}
+\usepackage{xcolor}
+
+\lstset{
+    basicstyle=\ttfamily\small, % 字体大小
+    backgroundcolor=\color{gray!5}, % 背景色
+    frame=single,   % 边框
+    keywordstyle=\color{blue}, % 关键字颜色
+    commentstyle=\color{green!50!black}, % 注释颜色
+    stringstyle=\color{red}, % 字符串颜色
+    numbers=left, % 行号在左边
+    numberstyle=\tiny\color{gray}, % 行号样式
+    breaklines=true, % 自动换行
+    captionpos=b % 标题在底部
+}
+
+% --- 链接设置 ---
+\usepackage[hidelinks]{hyperref}
+
+\begin{document}
+
+\begin{titlepage}
+    \centering % 让所有内容居中
+    \vspace*{1cm} % 顶部留白
+    
+    % 学校/课程名称
+    \Huge \textbf{复旦大学课程项目报告} \\[1.5cm]
+    
+    % width=10cm 控制图片宽度，可以自己调整
+    \includegraphics[width=10cm]{figure/fudan-name.pdf} \\[2cm] 
+    
+    % 标题
+    \Large \textbf{FPGA Mush Dash} \\[2cm]
+
+    \begin{center}
+    \Large
+    \textbf{小组成员：} \\[0.5cm] % 标题单独放
+    \begin{tabular}{l l}        % {l l} 表示有两列，都是左对齐
+        陈奕宽 & 25213040003 \\
+        陈之逸 & 25213040070 \\
+        林炫达 & 24212020013 \\
+        孟思思 & 24212020144 \\
+        薛文宵 & 24212020213 
+    \end{tabular}
+    \end{center}
+    
+    \vspace{2cm}
+    \today
+    \vfill % 自动填充底部空白
+\end{titlepage}
+
+% 生成目录
+\tableofcontents
+\newpage
+
+% --- 正文开始 ---
+\section{简介}
+
+\subsection{项目背景与实验要求}
+在嵌入式系统设计课程实验提供的三个选题方向（CPU扩展、VGA游戏、Web控制）中，我们选择了题目二：基于 FPGA 的 VGA 游戏设计与改进。
+基于题目要求，本项目在 Altera DE2-115 FPGA 开发板上复刻了游戏Muse Dash，不仅在硬件层面上实现了游戏的判定与显示模块，而且还构建了一套 Python 环境的上位机工具链，打通了从谱面解析、算法处理、自动生成 ROM 代码到板级验证的完整闭环，实现了高度自动化的软硬件协同开发流程。
+
+\subsection{系统整体设计}
+本项目复刻了知名节奏游戏 \textbf{Muse Dash（喵斯快跑）} 的核心玩法。
+\begin{itemize}
+    \item \textbf{游戏机制}：系统在 FPGA 端复刻了经典的双轨道（上层/下层）判定机制。玩家需根据背景音乐的节奏，通过按键击打对应轨道上飞驰而来的敌人。
+    \item \textbf{软硬协同架构}：
+    \begin{itemize}
+        \item \textbf{软件端（上位机）}：负责复杂的离线数据处理，包括音频播放、谱面文件的解析、特征提取、可视化分析、难度评估以及 Verilog ROM 文件的自动化生成。
+        \item \textbf{硬件端（FPGA）}：负责毫秒级的实时交互响应，包括 TextLCD 的动态滚屏显示、七段数码管的实时计分反馈以及音频同步信号的触发。
+    \end{itemize}
+\end{itemize}
+
+\subsection{项目分工与协作模式}
+本项目采用了现代软件工程中的模块化与接口隔离设计模式，团队成员通过 Git 进行协作，通过标准化的 JSON 协议与 API 接口实现模块解耦。具体分工如下：
+
+\begin{description}
+    \item[陈之逸] 
+    \begin{itemize}
+        \item \textbf{软件框架设计}：设计上位机交互逻辑，实现模式切换、Quartus 自动化调用及音频预览功能，完成系统框架搭建。
+        \item \textbf{Verilog编程与验证}：负责顶层模块的编写和全系统的上板校验。
+    \end{itemize}
+
+    \item[陈奕宽] 
+    \begin{itemize}
+        \item \textbf{Verilog编程与验证}：负责核心硬件模块的 RTL 设计与仿真。
+        \item \textbf{报告撰写与演示}：负责 LaTeX 实验报告的撰写与排版优化，制作答辩演示文稿并负责项目最终展示。
+    \end{itemize}
+    
+    \item[林炫达] 
+    \begin{itemize}
+        \item \textbf{谱面可视化分析}：实现 \texttt{chart\_analysis} 模块，开发谱面内容的深度统计逻辑与可视化绘图引擎。
+        \item \textbf{数据验证}：通过统计数据（如 Note 总数、密度分布）对比硬件运行结果，辅助定位软硬件数据传输中的解析错误。
+    \end{itemize}
+    
+    \item[薛文宵] 
+    \begin{itemize}
+        \item \textbf{核心引擎}：负责 \texttt{chart\_engine} 模块，实现谱面校验、BPM 更新及随机生成算法。
+    \end{itemize}
+    
+    \item[孟思思] 
+    \begin{itemize}
+        \item \textbf{音频同步机制}：设计基于“空格键触发”的启动播放协议与握手信号。
+        \item \textbf{软硬协同方案探索}：
+    \end{itemize}
+\end{description}
+
+\subsection{工具链}
+\begin{itemize}
+    \item \textbf{版本控制}：Github
+    \item \textbf{Verilog 编程}：VSCode + Vivado
+    \item \textbf{Python 编程}：VSCode
+    \item \textbf{行为级仿真}：Vivado
+    \item \textbf{硬件验证}：DE2-115 开发板 + Quartus 平台
+\end{itemize}
+
+\section{软件设计}
+
+\subsection{输入谱面格式}
+我们设计了一种标准化的 txt 谱面格式。
+
+\begin{description}
+    \item[参数] 包含 BPM（曲速）以及每个音符的三个属性：\textbf{时间 (time)}、\textbf{类型 (type)}、\textbf{轨道 (track)}。
+    \item[音符定义] \hfill
+    \begin{itemize}
+        \item \textbf{Time}：音符被判定的时钟周期数。
+        \item \textbf{Type}：TAP (短按), HOLD\_START (长按开始), HOLD\_MIDDLE (长按保持)。
+        \item \textbf{Track}：上轨道 (1) 或 下轨道 (0)。
+    \end{itemize}
+\end{description}
+
+\subsection{谱面可视化分析模块 (Chart Analysis)}
+\label{sec:chart_analysis}
+
+本模块是 MuseDash 项目的重要组成部分，旨在对游戏谱面进行全面的统计分析与可视化展示。该模块能够自动扫描项目中的谱面目录，解析谱面文件，提取关键信息，并生成多种类型的统计图表和数据摘要，为谱面设计、难度评估和数据分析提供有力支持。
+
+\subsubsection{系统架构设计}
+
+\paragraph{模块结构}
+谱面分析模块采用模块化设计，主要包含以下组件：
+\begin{itemize}
+    \item \textbf{主程序} (\texttt{chart\_analysis.py})：负责整体流程控制。
+    \item \textbf{依赖管理} (\texttt{requirements.txt})：确保运行环境的一致性。
+    \item \textbf{输出目录} (\texttt{outputs/})：存储所有生成的分析结果，包括协议文件、统计摘要和可视化图表。
+\end{itemize}
+
+\paragraph{核心类设计}
+系统采用面向对象的设计思想，将功能划分为三个核心类：
+\begin{enumerate}
+    \item \textbf{ChartParser（谱面解析器）}：负责读取和解析谱面 TXT 文件，从文件第一行提取 BPM 信息，逐行解析音符事件，并计算谱面总时长。
+    \item \textbf{ChartAnalyzer（谱面分析器）}：对解析后的数据进行多维度统计分析，包括总音符数统计、类型分布统计、密度曲线计算、轨道分布统计、时间分布数据提取以及难度曲线计算。
+    \item \textbf{ChartVisualizer（谱面可视化器）}：负责将统计数据转化为直观的可视化图表，生成六种不同类型的图表文件。
+\end{enumerate}
+
+\subsubsection{核心实现流程}
+
+\paragraph{1. 谱面解析流程}
+系统首先扫描 \texttt{charts/} 目录下的所有谱面子目录，对每个谱面目录进行以下处理：检查谱面 TXT 文件是否存在，调用 \texttt{chart\_check()} 函数进行格式校验，使用 \texttt{ChartParser} 解析谱面文件。
+解析过程中，系统读取文件第一行提取 BPM 值，使用正则表达式逐行匹配音符事件格式 \texttt{(时间,类型,轨道)}，将所有音符记录到列表中，并计算最大时间作为谱面时长。解析完成后，系统将 BPM、音符列表和时长信息传递给分析器。
+
+\paragraph{2. 统计分析流程}
+\texttt{ChartAnalyzer} 接收解析后的数据，执行全面的统计分析：
+\begin{itemize}
+    \item \textbf{音符计数}：在总音符数统计方面，系统只统计 \texttt{tap} 和 \texttt{hold\_start} 类型的音符，避免 \texttt{hold\_mid} 音符的重复计算，确保统计结果的准确性。
+    \item \textbf{密度曲线计算}：采用时间窗口方法，将谱面时长划分为多个时间窗口，窗口大小根据谱面总时长动态调整（公式为 $\max(100, \text{duration}/100)$）。随后统计每个窗口内的音符数量，生成时间-密度映射关系，有效反映谱面在不同时间段的音符密度变化。
+    \item \textbf{难度曲线计算}：这是系统的核心功能之一。为了量化谱面的瞬时难度，系统建立了一个综合考量音符类型、轨道并发数及密度的多因子加权模型。难度分数 $Score(t)$ 的计算公式如下：
+    \begin{equation}
+        Score(t) = \left(\sum w_{type}\right) \times \left[1 + 0.2 \times (N_{track}-1)\right] \times \left[1 + 0.1 \times (N_{notes}-1)\right]
+    \end{equation}
+    其中各项参数定义为：
+    \begin{itemize}
+        \item $\sum w_{type}$ \textbf{基础权重和}：窗口内所有音符权重的总和。具体权重设定为：Tap=1.0，Hold Start=1.5，Hold Mid=0.3，Hold End=0.5。
+        \item $N_{track}$ \textbf{轨道复杂度}：当前时间窗口内活跃的轨道数量。当多轨并发时，难度系数按线性增长（每增加一轨权重增加 0.2）。
+        \item $N_{notes}$ \textbf{密度因子}：当前窗口内的音符总数。音符越密集，手速要求越高，难度系数随之增长（每增加一个音符权重增加 0.1）。
+    \end{itemize}
+    最终生成的难度曲线不仅反映了谱面的张力变化，系统还会据此自动标记全曲的“最难点”（Peak Difficulty）。
+\end{itemize}
+
+\paragraph{3. 可视化生成流程}
+\texttt{ChartVisualizer} 根据分析结果生成六种不同类型的可视化图表，所有图表均采用 200 DPI 的高分辨率输出：
+\begin{itemize}
+    \item \textbf{音符类型数量饼图}：展示各类型音符的绝对数量（实际数字）。
+    \item \textbf{音符类型占比饼图}：展示各类型音符的相对比例（百分比）。
+    \item \textbf{密度曲线图}：使用折线图和填充区域展示谱面随时间变化的音符密度。
+    \item \textbf{轨道分布柱状图}：展示每个轨道的音符数量，并在柱状图上直接显示数值标签。
+    \item \textbf{音符时间分布直方图}：展示音符在时间轴上的分布情况，根据谱面时长动态调整 bins 数量。
+    \item \textbf{难度曲线分析图}：综合考虑密度、音符类型复杂度和轨道分布，显示平均难度线和峰值标记。
+\end{itemize}
+图表设计采用了现代配色方案（红、青、蓝渐变色），并优化了字体大小和粗细，添加了阴影效果增强立体感，曲线图和柱状图添加网格线以辅助数值读取。
+
+\paragraph{4. 数据输出流程}
+系统生成两种主要的数据输出文件：
+\begin{itemize}
+    \item \textbf{summary.json}：包含谱面的核心统计信息，包括曲目名、BPM 值、谱面时长、总音符数、Tap/Hold\_start 音符数量、各类型音符数量分布、轨道分布、密度峰值和平均密度。
+    \item \textbf{protocol.json}：作为协议文件，汇总所有谱面的信息，包括每个谱面的名称、生成的图表文件列表、summary 文件路径，以及可选的 BPM、时长、文件夹名和音频文件名。
+\end{itemize}
+
+\subsubsection{技术实现细节}
+
+\paragraph{依赖库选择}
+\begin{itemize}
+    \item \textbf{matplotlib}：作为主要的图表生成库，支持多种图表类型，输出质量高。
+    \item \textbf{numpy}：用于数值计算和颜色生成，提供高效的数组操作和数学运算支持。
+    \item \textbf{json/pathlib/re}：分别用于 JSON 读写、跨平台路径处理及正则表达式解析。
+\end{itemize}
+
+\paragraph{谱面文件格式解析}
+谱面文件采用文本格式，第一行为 BPM 信息（\texttt{bpm=数值}），后续每行表示一个音符事件 \texttt{(时间,类型,轨道)}。其中时间为整数，类型包括 \texttt{tap}、\texttt{hold\_start} 等，轨道为 0 或 1。系统使用正则表达式精确匹配这种格式，确保解析的准确性。
+
+\paragraph{图表尺寸适配}
+为了适配前端显示需求，系统对不同类型的图表采用不同的尺寸策略：
+\begin{itemize}
+    \item \textbf{饼图}：使用 $6 \times 6$ 英寸的正方形尺寸，不使用 \texttt{bbox\_inches='tight'} 以保持固定比例。
+    \item \textbf{其他图表}（曲线、柱状、直方）：统一使用 $9 \times 6$ 英寸的 3:2 比例，与前端容器的 $180 \times 120$ 像素比例匹配，确保图表在前端完整显示而不被裁剪。
+\end{itemize}
+
+\paragraph{特殊处理机制}
+系统对 Random 谱面采用与其他谱面相同的处理逻辑，保证一致性。在统计总音符数时，特意剔除 \texttt{hold\_mid} 音符以避免重复计数。同时，系统明确区分了 note\_count（整数）和 note\_density（百分比）两种饼图，满足不同分析需求。对于空数据情况，系统会生成空图表占位，避免程序异常。
+
+\subsubsection{使用方式与前端集成}
+
+\paragraph{环境配置与运行}
+使用前需执行 \texttt{pip install -r requirements.txt} 安装依赖（要求 Python 3.6+）。在目录下执行 \texttt{python chart\_analysis.py} 即可自动扫描 \texttt{charts} 目录，处理完成后结果保存在 \texttt{outputs/} 中。
+
+\paragraph{输出文件与前端集成}
+输出目录包含 \texttt{protocol.json} 协议文件、每个谱面的 \texttt{summary.json} 及六种 PNG 图表。前端系统通过读取 \texttt{protocol.json} 获取所有谱面信息列表，进而加载对应的图表（标准 PNG 格式，直接嵌入 HTML）和统计摘要（JSON 格式，便于 JavaScript 解析）。
+
+\subsubsection{功能总结与扩展方向}
+当前版本已实现完整的谱面分析功能，包括自动扫描解析、多维度统计（总数、类型、密度、轨道、时间、难度）、高质量可视化生成及协议文件输出。系统设计合理，功能完善。
+
+未来扩展方向包括：
+\begin{itemize}
+    \item 支持多 BPM 谱面并绘制 BPM 变化曲线。
+    \item 使用 Plotly 生成可交互的 HTML 图表。
+    \item 添加连击数、最大连击、平均间隔等更多统计指标。
+    \item 生成热力图，展示音符在时间和轨道上的热力分布。
+\end{itemize}
+
+\subsection{谱面转 ROM}
+
+\subsection{随机谱面生成与校验}
+
+\subsection{音乐播放}
+
+\subsection{软硬协同方案探索}
+
+
+\section{硬件设计}
+
+\paragraph{显示与输入}
+\begin{itemize}
+    \item \textbf{音符类型}：`O` 代表 TAP（点击），`<` 代表 HOLD\_START（长按开始），`=` 代表 HOLD\_MIDDLE（长按保持）。
+    \item \textbf{按键映射}：左起第一个按钮控制上轨道，第二个控制下轨道；右起第一个按钮为重启 (restart)，右起第一个开关为复位 (\texttt{rst\_n})。
+    \item \textbf{反馈}：七段数码管显示判定结果（PERFECT, GOOD, MISS/FL）和实时累计分数。
+\end{itemize}
+
+\subsection{顶层模块}
+顶层模块负责连接各个子模块并执行基本逻辑运算（如复位信号整合）。它协调各模块（如时钟分频、地址生成、队列、判定、显示等）协同工作，简化了整体架构。
+
+\subsection{分布式架构 (Distributed Architecture)}
+为了便于调试和分工，我们将设计划分为 14 个子模块，包括：
+
+\begin{description}
+    \item[Clk\_Div] 生成可变频率时钟。
+    \item[LFSR] 随机数生成（用于测试）。
+    \item[Debouncer] 按键消抖。
+    \item[Queue] 数据队列处理。
+    \item[Judgement] 核心判定逻辑。
+    \item[TextLCD \& 7Seg] 显示模块。
+    \item[Score \& Accumulator] 分数转换与累加。
+\end{description}
+
+\subsection{层次化设计}
+主要体现在加法器和累加器的设计上：
+\begin{itemize}
+    \item \textbf{结构}：1位 BCD 加法器 $\rightarrow$ 4位 BCD 加法器 $\rightarrow$ 16位累加器。
+    \item \textbf{预加法 (Pre-Addition)}：在 \texttt{ScoreConversion} 模块中先将上下轨道的分数相加，再传入累加器，减少了累加器的端口复杂度。
+\end{itemize}
+
+\subsection{可调节时钟分频器}
+\texttt{clk\_div} 模块通过参数 \texttt{div\_cnt} 将 50MHz 输入时钟分频为低频信号（如 10Hz/100ms）。该参数在顶层模块中根据 BPM 动态计算，使得 C++ 程序可以轻松改变游戏速度。
+
+\subsection{消抖}
+利用计数器和状态标志来过滤机械按键的抖动。只有当输入信号稳定一段时间（计数器归零）后，输出信号才会更新。这确保了输入信号的准确性。
+
+\subsection{随机数生成}
+使用 13位 LFSR（线性反馈移位寄存器）生成伪随机序列。主要用于在代码未完成时的随机输入测试。
+
+\subsection{TextLCD 显示}
+
+\subsubsection{队列设计}
+接收 ROM 数据并在 \texttt{clk\_div} 驱动下进行移位，模拟音符滚动效果。最左侧数据用于判定和显示。
+
+\subsubsection{Text LCD 设计}
+基于 HD44780 控制器。状态机循环执行：空闲 $\rightarrow$ 清屏 $\rightarrow$ 设置模式 $\rightarrow$ 设置 DDRAM 地址 $\rightarrow$ 写入数据。将音符映射为 ASCII 码写入 DDRAM。
+
+\subsubsection{双频率设计}
+引入了 \texttt{clk\_buf}（屏幕帧率）独立于 \texttt{clk\_div}（游戏逻辑/BPM）。这解决了帧率过低导致显示闪烁或上下轨道不同步的问题。
+
+\subsection{七段数码管显示}
+由于 DE2-115 板载数码管是独立控制的，不需要多路复用。我们设计了纯组合逻辑电路来显示数字（0-9）和字符（PF, GO, FL）。
+
+\subsection{判定}
+这是最核心的模块，负责接收音符、检测按键并输出结果。
+
+\subsubsection{硬件判定标准}
+\begin{itemize}
+    \item \textbf{TAP/HOLD\_START}：在判定窗口内，若按键上升沿落在窗口中间 $\pm 1/2$ 区域为 \textbf{PERFECT}，否则为 \textbf{GOOD}。超出窗口为 \textbf{MISS}。
+    \item \textbf{HOLD\_MIDDLE}：必须在前半个判定周期内保持按住。如果松开过早则为 MISS。
+\end{itemize}
+
+\subsubsection{信号判定}
+引入 \texttt{judged} 信号标志当前音符是否已完成判定，防止重复计分。
+\textbf{逻辑}：检测到有效按键或超时未按，信号置 1；判定周期结束或无音符时，信号置 0。
+
+\subsubsection{FSM 设计}
+状态机包含 \textbf{NO\_NOTE, GOOD, PERFECT, MISS} 四个状态。
+\textbf{特殊机制}：为了解决组合逻辑传播延迟问题，我们强制 FSM 在音符判定中间的 \texttt{clk\_div} 上升沿短暂返回 NO\_NOTE 状态。
+
+\subsubsection{Vivado 仿真}
+在上板前进行了详细的行为级仿真，验证了不同音符和按键时机的判定逻辑。
+
+\subsection{分数累加}
+\begin{itemize}
+    \item \textbf{BCD 加法器}：采用级联的 1位 BCD 加法器构建 4位加法器。当和大于 9 或有进位时，进行 +6 修正。
+    \item \textbf{预加法}：在分数转换模块先计算 \texttt{score\_up + score\_down}，然后再输入累加器，避免了设计复杂的三输入加法器。
+\end{itemize}
+
+\section{讨论}
+
+\subsection{设计技巧}
+\begin{itemize}
+    \item 避免生成锁存器（Latches）：在组合逻辑中完整覆盖 \texttt{if-else} 或 \texttt{case} 分支。
+    \item 优先使用 \texttt{assign} 语句代替 \texttt{always} 块中的组合逻辑。
+    \item 规范命名（如 \texttt{rst\_n} 表示低电平复位）和注释。
+    \item 时序逻辑中使用非阻塞赋值 (\texttt{<=})。
+\end{itemize}
+
+\subsection{判定设计演变}
+最初尝试分离“监控 FSM”和“结果 FSM”，因过于复杂而废弃。最终简化为单 FSM 设计。仿真无法覆盖所有错误，部分问题是在上板测试中发现并打补丁修复的。
+
+\subsection{边沿捕捉}
+在硬件中捕捉跨时钟域信号的上升沿非常困难。我们通过经验法则（试错法）决定是将信号延迟 1 个周期还是 2 个周期来生成脉冲信号。
+
+\subsection{信号穿透}
+这是一个关键问题。\texttt{cur\_note} 信号在切换时会出现毛刺（Glitch），导致 HOLD\_MIDDLE 信号在时钟偏差下“穿透”到前一个周期，造成错误判定。
+\textbf{解决方案}：在判定区间的中间点，强制将状态置为 \textbf{NO\_NOTE} 一次。这相当于一次软复位，阻断了错误信号的传播。
+
+\subsection{软硬件不一致性}
+Vivado 仿真完美，但上板出现问题（如 FSM 卡死在 NO\_NOTE，或按键对 TAP 无响应）。由于无法定位根源，只能通过添加补丁代码（如强制状态跳转）来解决。
+
+\subsection{Quartus 调试}
+使用了 Signal Tap Logic Analyzer 进行片上调试。配置采样深度（2K）和触发条件（Basic AND/OR），观察实时波形以定位问题。
+
+\section{总结}
+我们成功在 DE2-115 上实现了一个基于 Muse Dash 的节奏游戏。
+
+\section{未来展望}
+\begin{enumerate}
+    \item \textbf{消抖延迟优化}：目前的消抖模块引入了 $>20$ms 的延迟，对于判定区间仅 $\pm 50$ms 的节奏游戏影响较大。未来需要在判定逻辑中补偿这一延迟。
+\end{enumerate}
+
+\end{document}
