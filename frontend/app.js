@@ -14,6 +14,9 @@ const PROTOCOL_URL = `${BASE_PATH}chart_analysis/outputs/protocol.json`;
 const ANALYSIS_ENDPOINT = `${BASE_PATH}chart_analysis/run`;
 let chartAnalysisPromise = null;
 
+// 假设谱面时间以 tick 计，当前按 4 tick = 1 拍 进行换算
+const TICKS_PER_BEAT = 4;
+
 // 模拟数据：仅用于 UI 占位，实际应从 chart_analysis 拉取（排除 Random 目录）。
 const MOCK_CHARTS = [
   { id: "Cthugha", name: "Cthugha", bpm: 170, duration: "02:10", folder: "charts/Cthugha" },
@@ -191,12 +194,37 @@ function renderTrackList(charts) {
     const card = document.createElement("div");
     card.className = "track-card";
     card.dataset.id = chart.id;
-    card.innerHTML = `
+
+    const content = document.createElement("div");
+    content.className = "track-content";
+
+    const info = document.createElement("div");
+    info.className = "track-info";
+    info.innerHTML = `
       <div class="track-name">${chart.name}</div>
-      <div class="track-meta">BPM: ${chart.bpm || "?"} · 时长: ${chart.duration || "--:--"}</div>
+      <div class="track-meta">BPM: ${chart.bpm || "?"} · 时长: ${formatDurationForDisplay(chart.duration_raw || chart.duration, chart.bpm)}</div>
       <div class="track-meta">目录: ${chart.folder || "charts/??"}</div>
-      <div class="track-meta" style="margin-top:6px;">点击选中 / 悬停放大</div>
     `;
+
+    const images = document.createElement("div");
+    images.className = "track-images";
+    const cover = buildCoverImage(chart);
+    if (cover) {
+      const img = document.createElement("img");
+      img.src = cover;
+      img.alt = `${chart.name} cover`;
+      images.appendChild(img);
+    } else {
+      const placeholder = document.createElement("div");
+      placeholder.className = "track-image-placeholder";
+      placeholder.textContent = "暂无封面";
+      images.appendChild(placeholder);
+    }
+
+    content.appendChild(info);
+    content.appendChild(images);
+    card.appendChild(content);
+
     card.addEventListener("mouseenter", () => handleHover(chart));
     card.addEventListener("mouseleave", stopPreviewAudio);
     card.addEventListener("click", () => selectChart(chart, card));
@@ -205,7 +233,7 @@ function renderTrackList(charts) {
 }
 
 function handleHover(chart) {
-  if (els.previewMeta) els.previewMeta.textContent = `预览：${chart.name} （自动播放音频并展示分析图，需后台支持）`;
+  if (els.previewMeta) els.previewMeta.textContent = "谱面信息统计：";
   renderPreviewImages(chart.analysisImages, els.previewImages);
   renderSummary(chart.analysisSummary, els.previewData);
   playPreviewAudio(chart);
@@ -251,23 +279,59 @@ function formatSummary(data) {
   if (!data || typeof data !== "object") return "无有效数据";
   const lines = [];
   if (data.title) lines.push(`曲目: ${data.title}`);
-  if (data.duration) lines.push(`时长: ${data.duration}`);
+  const durationStr = formatDurationForDisplay(data.duration, data.bpm);
+  if (durationStr) lines.push(`时长: ${durationStr}`);
   if (data.bpm) lines.push(`BPM: ${data.bpm}`);
   if (data.note_count) lines.push(`音符数量: ${data.note_count}`);
-  if (data.density_peak) lines.push(`密度峰值: ${data.density_peak}`);
-  if (data.density_avg) lines.push(`平均密度: ${data.density_avg}`);
-  if (data.note_types) lines.push(`音符类型: ${JSON.stringify(data.note_types)}`);
+  const peakPerSec = toNotesPerSecond(data.density_peak, data.duration, data.bpm);
+  if (peakPerSec) lines.push(`密度峰值: ${peakPerSec} 物量/秒`);
+  const avgPerSec = toNotesPerSecond(data.density_avg, data.duration, data.bpm, true);
+  if (avgPerSec) lines.push(`平均密度: ${avgPerSec} 物量/秒`);
+  if (data.note_types) lines.push(`物量: ${formatNoteTypes(data.note_types)}`);
   if (lines.length === 0) lines.push(JSON.stringify(data, null, 2));
   return lines.join("\n");
 }
 
-function normalizeAudioPath(c) {
-  let folderPath = c.folder || `charts/${c.name}`;
-  if (!folderPath.startsWith("charts/") && !folderPath.startsWith("/charts/")) {
-    folderPath = `charts/${folderPath.replace(/^\/+/, "")}`;
-  } else {
-    folderPath = folderPath.replace(/^\/+/, "");
+function formatDurationForDisplay(duration, bpm) {
+  if (typeof duration !== "number" || duration <= 0) return "";
+  if (typeof bpm !== "number" || bpm <= 0) {
+    // 没有 BPM 就直接返回原值
+    return `${duration}`;
   }
+  // tick -> 秒：tick / TICKS_PER_BEAT 拍，拍 -> 秒：(拍 / BPM) * 60
+  const seconds = (duration / TICKS_PER_BEAT) * (60 / bpm);
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  const mm = String(m).padStart(2, "0");
+  const ss = String(s).padStart(2, "0");
+  return `${mm}分${ss}秒`;
+}
+
+function toNotesPerSecond(val, duration, bpm, isAvg = false) {
+  if (typeof val !== "number" || val <= 0) return "";
+  if (typeof bpm !== "number" || bpm <= 0) return `${val}`;
+  if (typeof duration !== "number" || duration <= 0) return `${val}`;
+  // 与 chart_analysis 相同的窗口大小：max(100, duration // 100)
+  const windowSize = Math.max(100, Math.floor(duration / 100));
+  const secondsPerTick = (60 / bpm) / TICKS_PER_BEAT;
+  const windowSeconds = windowSize * secondsPerTick;
+  if (windowSeconds <= 0) return `${val}`;
+  const perSec = val / windowSeconds;
+  const rounded = isAvg ? Math.round(perSec * 10) / 10 : Math.round(perSec * 100) / 100;
+  return rounded.toFixed(isAvg ? 1 : 2);
+}
+
+function formatNoteTypes(noteTypes) {
+  if (!noteTypes || typeof noteTypes !== "object") return "";
+  const parts = [];
+  for (const [k, v] of Object.entries(noteTypes)) {
+    parts.push(`${v} ${k}`);
+  }
+  return parts.join("，");
+}
+
+function normalizeAudioPath(c) {
+  let folderPath = ensureChartsFolder(c.folder, c.name);
   let audioRel = c.audio;
   if (!audioRel) {
     audioRel = `${folderPath}/${c.name}.mp3`;
@@ -281,6 +345,20 @@ function normalizeAudioPath(c) {
     return audioRel;
   }
   return `${BASE_PATH}${audioRel.replace(/^\/+/, "")}`;
+}
+
+function ensureChartsFolder(folder, name) {
+  let folderPath = folder || `charts/${name}`;
+  folderPath = folderPath.replace(/^\/+/, "");
+  if (!folderPath.startsWith("charts/")) {
+    folderPath = `charts/${folderPath}`;
+  }
+  return folderPath;
+}
+
+function buildCoverImage(chart) {
+  const folderPath = ensureChartsFolder(chart.folder, chart.name);
+  return `${BASE_PATH}${folderPath}/${chart.name}.png`;
 }
 
 function selectChart(chart, cardEl) {
