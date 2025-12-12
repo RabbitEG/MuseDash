@@ -47,7 +47,8 @@ def chart_check(chart_name: str, chart_path: Optional[Path] = None) -> bool:
         return False
 
     last_time: Optional[int] = None
-    last_by_trace: Dict[str, Optional[Tuple[int, str]]] = {"0": None, "1": None}
+    last_by_trace: Dict[str, Optional[Tuple[int, str]]] = {
+        "0": None, "1": None}
 
     for idx, raw_line in enumerate(lines[1:], start=2):
         line = raw_line.strip()
@@ -82,7 +83,8 @@ def chart_check(chart_name: str, chart_path: Optional[Path] = None) -> bool:
             return False
 
         if last_time is not None and time_val < last_time:
-            print(f"[chart_check] 时间需整体单调不减：第 {idx} 行 {time_val} < 上一行 {last_time}")
+            print(
+                f"[chart_check] 时间需整体单调不减：第 {idx} 行 {time_val} < 上一行 {last_time}")
             return False
         last_time = time_val
 
@@ -90,16 +92,19 @@ def chart_check(chart_name: str, chart_path: Optional[Path] = None) -> bool:
         if prev is not None:
             prev_time, prev_type = prev
             if prev_time >= time_val:
-                print(f"[chart_check] 同轨时间需严格递增：轨道 {trace_str} 第 {idx} 行 {time_val} <= 上一事件 {prev_time}")
+                print(
+                    f"[chart_check] 同轨时间需严格递增：轨道 {trace_str} 第 {idx} 行 {time_val} <= 上一事件 {prev_time}")
                 return False
 
             if evt_type == "hold_mid":
                 if prev_type not in {"hold_start", "hold_mid"} or prev_time != time_val - 1:
-                    print(f"[chart_check] hold_mid 需紧接前一拍同轨 hold_start/hold_mid：第 {idx} 行")
+                    print(
+                        f"[chart_check] hold_mid 需紧接前一拍同轨 hold_start/hold_mid：第 {idx} 行")
                     return False
             else:
                 if prev_type == "hold_start":
-                    print(f"[chart_check] hold_start 后必须跟随连续 hold_mid：轨道 {trace_str} 第 {idx} 行")
+                    print(
+                        f"[chart_check] hold_start 后必须跟随连续 hold_mid：轨道 {trace_str} 第 {idx} 行")
                     return False
         else:
             if evt_type == "hold_mid":
@@ -202,7 +207,7 @@ def generate_random_chart(output_dir, name="Random", bpm=120, length_seconds=60,
 # ==== process_chart (adapted from chart_engine/rom_gen.py) ====
 def process_chart(chart_name: str, output_filename: str = "ROM.v") -> bool:
     base_dir = Path(__file__).resolve().parent.parent
-    chart_path = base_dir / "charts" / "Random" / f"{chart_name}.txt"
+    chart_path = _resolve_chart_path(chart_name, None)
     if not chart_path.exists():
         print(f"[process_chart] 文件不存在: {chart_path}")
         return False
@@ -234,7 +239,7 @@ def process_chart(chart_name: str, output_filename: str = "ROM.v") -> bool:
     except (ValueError, ZeroDivisionError) as exc:
         print(f"[process_chart] 解析 BPM 失败: {exc}")
         return False
-    
+
     # 更新 MuseDash.v 的 div_cnt
     musedash_path = base_dir / "verilog" / "MuseDash.v"
     try:
@@ -242,9 +247,11 @@ def process_chart(chart_name: str, output_filename: str = "ROM.v") -> bool:
         # 使用正则表达式替换 div_cnt 的值
         div_cnt_pattern = r"(parameter\s+div_cnt\s*=\s*)\d+"
         replacement = f"\\g<1>{div_cnt}"
-        musedash_content = re.sub(div_cnt_pattern, replacement, musedash_content)
+        musedash_content = re.sub(
+            div_cnt_pattern, replacement, musedash_content)
         musedash_path.write_text(musedash_content, encoding="utf-8")
-        print(f"[process_chart] 已更新 MuseDash.v 的 div_cnt = {div_cnt} (BPM = {bpm})")
+        print(
+            f"[process_chart] 已更新 MuseDash.v 的 div_cnt = {div_cnt} (BPM = {bpm})")
     except Exception as exc:
         print(f"[process_chart] 更新 MuseDash.v 失败: {exc}")
         return False
@@ -278,7 +285,8 @@ def process_chart(chart_name: str, output_filename: str = "ROM.v") -> bool:
     for time_val, evt_type, trace_str in events:
         val = type_to_val[evt_type]
         if time_val >= rom_len:
-            print(f"[process_chart] time 索引越界: time={time_val}, rom_len={rom_len}")
+            print(
+                f"[process_chart] time 索引越界: time={time_val}, rom_len={rom_len}")
             return False
         if trace_str == "1":
             rom[time_val] = (rom[time_val] & 0b0011) | (val << 2)
@@ -322,25 +330,36 @@ def process_chart(chart_name: str, output_filename: str = "ROM.v") -> bool:
 
 def main():
     base_dir = Path(__file__).resolve().parent.parent
-    charts_dir = base_dir / "charts" / "Random"
+    chart_name = "Random"
+    chart_dir = base_dir / "charts" / chart_name
 
-    print("[1/3] 生成随机谱面 Random_test.txt ...")
-    chart_path = generate_random_chart(charts_dir, name="Random_test", bpm=120, length_seconds=200, seed=42)
+    print(f"[1/5] 生成随机谱面 {chart_name}.txt ...")
+    chart_path = generate_random_chart(
+        chart_dir, name=chart_name, bpm=120, length_seconds=200, seed=42)
     if chart_path is None:
         return
-    print(f"    ✓ 已生成: {chart_path}")
+    print(f"    [OK] 已生成: {chart_path}")
 
-    print("[2/3] 校验谱面 ...")
-    if not chart_check("Random_test", chart_path):
+    print("[2/5] 校验谱面 ...")
+    if not chart_check(chart_name, chart_path):
         return
-    print("    ✓ 校验通过")
+    print("    [OK] 校验通过")
 
-    print("[3/3] 生成 Verilog ROM (test_rom.v) ...")
-    if not process_chart("Random_test", output_filename="test_rom.v"):
+    print("[3/5] 生成 Verilog ROM (test_rom.v) ...")
+    if not process_chart(chart_name, output_filename="test_rom.v"):
         return
-    print(f"    ✓ 已输出: {base_dir / 'verilog' / 'test_rom.v'}")
+    print(f"    [OK] 已输出: {base_dir / 'verilog' / 'test_rom.v'}")
+
+    print("[4/5] 处理 Cthugha 谱面 ...")
+    if not process_chart("Cthugha", output_filename="Cthugha_ROM.v"):
+        return
+    print(f"    [OK] 已输出: {base_dir / 'verilog' / 'Cthugha_ROM.v'}")
+
+    print("[5/5] 处理 Cyaegha 谱面 ...")
+    if not process_chart("Cyaegha", output_filename="Cyaegha_ROM.v"):
+        return
+    print(f"    [OK] 已输出: {base_dir / 'verilog' / 'Cyaegha_ROM.v'}")
 
 
 if __name__ == "__main__":
     main()
-

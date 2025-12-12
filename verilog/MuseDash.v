@@ -1,5 +1,5 @@
 module MuseDash #(
-    parameter div_cnt = 1760563 
+    parameter div_cnt = 1875000 
     // div_cnt = 50,000,000 / (bpm * 4 / 60) / 2 = 375,000,000 / bpm;
 ) (
     input           clk,
