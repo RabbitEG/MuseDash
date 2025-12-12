@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import random
 import re
+import time
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
@@ -121,76 +122,113 @@ def chart_check(chart_name: str, chart_path: Optional[Path] = None) -> bool:
     return True
 
 
+TICKS_PER_BEAT = 4
+
+
 # ==== generate_random_chart (from chart_engine/random_gen.py) ====
-def generate_random_chart(output_dir, name="Random", bpm=120, length_seconds=60, seed=None):
+def generate_random_chart(
+    output_dir,
+    name="Random",
+    bpm=None,
+    length_seconds=None,
+    seed=None,
+    bpm_range=(150, 250),
+    length_range=(120, 180),
+    note_range=(1000, 1500),
+):
     if seed is not None:
         random.seed(seed)
+
+    # 随机 BPM 与时长
+    output_bpm = bpm if bpm is not None else random.randint(*bpm_range)
+    output_len = length_seconds if length_seconds is not None else random.randint(*length_range)
+    target_notes = random.randint(*note_range)
+
+    total_ticks = int(output_bpm * output_len * TICKS_PER_BEAT / 60)
+    # 平均间隔（tick）尽量靠近目标物量
+    avg_gap = max(1, total_ticks // target_notes)
+    gap_min = max(1, avg_gap - 1)
+    gap_max = avg_gap + 2
 
     output_path = Path(output_dir) / f"{name}.txt"
     try:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, "w", encoding="utf-8"):
-            pass
     except Exception as exc:
-        print(f"错误：无法创建文件 {output_path}: {exc}")
+        print(f"错误：无法创建目录 {output_path.parent}: {exc}")
         return None
 
-    maxlength = bpm * length_seconds / 60
-    n = 0
-    output_bpm = bpm if bpm is not None else 120
     lines = [f"bpm={output_bpm}"]
-
-    while n < maxlength:
-        x = random.randint(2, 6)
+    n = 0
+    note_count = 0
+    while n < total_ticks and note_count < target_notes * 1.1:
+        x = random.randint(gap_min, gap_max)
         type_val = random.randint(1, 100)
         trace = random.randint(1, 3)
 
-        if type_val <= 85:
+        if type_val <= 80:
+            # tap
             if trace == 1:
                 lines.append(f"({n+x},tap,0)")
+                note_count += 1
             elif trace == 2:
                 lines.append(f"({n+x},tap,1)")
+                note_count += 1
             elif trace == 3:
                 lines.append(f"({n+x},tap,0)")
                 lines.append(f"({n+x},tap,1)")
+                note_count += 2
             n = n + x
         else:
             length = random.randint(3, 8)
             head = random.randint(1, 20)
             tail = random.randint(1, 10)
             for m in range(length):
+                tick = n + x + m
                 if m == 0:
                     if trace == 1:
-                        lines.append(f"({n+x},hold_start,0)")
+                        lines.append(f"({tick},hold_start,0)")
+                        note_count += 1
                         if head == 1:
-                            lines.append(f"({n+x},tap,1)")
+                            lines.append(f"({tick},tap,1)")
+                            note_count += 1
                     elif trace == 2:
-                        lines.append(f"({n+x},hold_start,1)")
+                        lines.append(f"({tick},hold_start,1)")
+                        note_count += 1
                         if head == 1:
-                            lines.append(f"({n+x},tap,0)")
+                            lines.append(f"({tick},tap,0)")
+                            note_count += 1
                     elif trace == 3:
-                        lines.append(f"({n+x},hold_start,0)")
-                        lines.append(f"({n+x},hold_start,1)")
+                        lines.append(f"({tick},hold_start,0)")
+                        lines.append(f"({tick},hold_start,1)")
+                        note_count += 2
                 elif m == length - 1:
                     if trace == 1:
-                        lines.append(f"({n+x+m},hold_mid,0)")
+                        lines.append(f"({tick},hold_mid,0)")
+                        note_count += 1
                         if tail == 1:
-                            lines.append(f"({n+x+m},tap,1)")
+                            lines.append(f"({tick},tap,1)")
+                            note_count += 1
                     elif trace == 2:
-                        lines.append(f"({n+x+m},hold_mid,1)")
+                        lines.append(f"({tick},hold_mid,1)")
+                        note_count += 1
                         if tail == 1:
-                            lines.append(f"({n+x+m},tap,0)")
+                            lines.append(f"({tick},tap,0)")
+                            note_count += 1
                     elif trace == 3:
-                        lines.append(f"({n+x+m},hold_mid,0)")
-                        lines.append(f"({n+x+m},hold_mid,1)")
+                        lines.append(f"({tick},hold_mid,0)")
+                        lines.append(f"({tick},hold_mid,1)")
+                        note_count += 2
                 else:
                     if trace == 1:
-                        lines.append(f"({n+x+m},hold_mid,0)")
+                        lines.append(f"({tick},hold_mid,0)")
+                        note_count += 1
                     elif trace == 2:
-                        lines.append(f"({n+x+m},hold_mid,1)")
+                        lines.append(f"({tick},hold_mid,1)")
+                        note_count += 1
                     elif trace == 3:
-                        lines.append(f"({n+x+m},hold_mid,0)")
-                        lines.append(f"({n+x+m},hold_mid,1)")
+                        lines.append(f"({tick},hold_mid,0)")
+                        lines.append(f"({tick},hold_mid,1)")
+                        note_count += 2
             n = n + x + (length - 1)
 
     try:
@@ -201,6 +239,7 @@ def generate_random_chart(output_dir, name="Random", bpm=120, length_seconds=60,
         print(f"错误：无法写入文件 {output_path}: {exc}")
         return None
 
+    print(f"[generate_random_chart] bpm={output_bpm}, len={output_len}s, target={target_notes}, actual={note_count}")
     return output_path
 
 
@@ -332,13 +371,14 @@ def main():
     base_dir = Path(__file__).resolve().parent.parent
     chart_name = "Random"
     chart_dir = base_dir / "charts" / chart_name
+    dynamic_seed = time.time_ns()
 
     print(f"[1/5] 生成随机谱面 {chart_name}.txt ...")
     chart_path = generate_random_chart(
-        chart_dir, name=chart_name, bpm=120, length_seconds=200, seed=42)
+        chart_dir, name=chart_name, bpm=None, length_seconds=None, seed=dynamic_seed)
     if chart_path is None:
         return
-    print(f"    [OK] 已生成: {chart_path}")
+    print(f"    [OK] 已生成: {chart_path} (seed={dynamic_seed})")
 
     print("[2/5] 校验谱面 ...")
     if not chart_check(chart_name, chart_path):

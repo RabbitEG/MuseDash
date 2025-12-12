@@ -1,5 +1,5 @@
-// 前端流程占位实现：开始界面 -> 选择模式（随机/普通）-> 后续动作。
-// 需要后端提供 chart_engine / chart_analysis 接口。
+// 前端流程占位实现：开始界面 -> 选择模式（随机/普通）-> 后续动作
+// 需要后端提供 chart_engine / chart_analysis 接口
 
 const state = {
   started: false,
@@ -7,17 +7,19 @@ const state = {
   charts: [],
   selectedChart: null,
   randomReady: false,
+  randomGenerated: false,
 };
 
 const BASE_PATH = detectBasePath();
 const PROTOCOL_URL = `${BASE_PATH}chart_analysis/outputs/protocol.json`;
 const ANALYSIS_ENDPOINT = `${BASE_PATH}chart_analysis/run`;
+const RANDOM_COVER = `${BASE_PATH}charts/Random/Random.png`;
 let chartAnalysisPromise = null;
 
 // 假设谱面时间以 tick 计，当前按 4 tick = 1 拍 进行换算
 const TICKS_PER_BEAT = 4;
 
-// 模拟数据：仅用于 UI 占位，实际应从 chart_analysis 拉取（排除 Random 目录）。
+// 模拟数据：仅用于 UI 占位，实际应从 chart_analysis 拉取（排除 Random 目录）
 const MOCK_CHARTS = [
   { id: "Cthugha", name: "Cthugha", bpm: 170, duration: "02:10", folder: "charts/Cthugha" },
   { id: "Cthugha_1", name: "Cthugha_1", bpm: 170, duration: "02:10", folder: "charts/Cthugha_1" },
@@ -31,6 +33,9 @@ const els = {
   modeBar: document.getElementById("modeBar"),
   normalPanel: document.getElementById("normalPanel"),
   randomPanel: document.getElementById("randomPanel"),
+  modeChooser: document.getElementById("modeChooser"),
+  btnChooseRandom: document.getElementById("btn-choose-random"),
+  btnChooseNormal: document.getElementById("btn-choose-normal"),
   normalStatus: document.getElementById("normalStatus"),
   randomStatus: document.getElementById("randomStatus"),
   trackList: document.getElementById("trackList"),
@@ -41,12 +46,17 @@ const els = {
   toast: document.getElementById("toast"),
   btnSelectNormal: document.getElementById("btn-select-normal"),
   btnOpenQuartus: document.getElementById("btn-open-quartus"),
+  btnPlayNormal: document.getElementById("btn-play-normal"),
   btnModeRandom: document.getElementById("btn-mode-random"),
   btnModeNormal: document.getElementById("btn-mode-normal"),
   btnGenerateRandom: document.getElementById("btn-generate-random"),
-  btnStartRandom: document.getElementById("btn-start-random"),
+  btnSelectRandom: document.getElementById("btn-select-random"),
+  btnOpenRandom: document.getElementById("btn-open-random"),
+  btnPlayRandom: document.getElementById("btn-play-random"),
   randomPreview: document.getElementById("randomPreview"),
   randomData: document.getElementById("randomData"),
+  randomMeta: document.getElementById("randomMeta"),
+  randomCardImage: document.getElementById("randomCardImage"),
 };
 
 // 单一音频预览实例
@@ -66,7 +76,7 @@ function startExperience() {
   if (state.started) return;
   state.started = true;
   if (els.overlay) els.overlay.classList.add("hidden");
-  if (els.modeBar) els.modeBar.classList.remove("hidden");
+  if (els.modeChooser) els.modeChooser.classList.remove("hidden");
   showToast("选择模式开始吧！");
 }
 
@@ -79,11 +89,16 @@ function switchMode(mode) {
   } else if (mode === "random") {
     if (els.randomPanel) els.randomPanel.classList.remove("hidden");
     if (els.normalPanel) els.normalPanel.classList.add("hidden");
-    state.randomReady = false;
-    if (els.btnStartRandom) els.btnStartRandom.disabled = true;
-    if (els.randomStatus) els.randomStatus.textContent = "等待生成 Random 谱面...";
-    if (els.randomPreview) els.randomPreview.innerHTML = "";
-    if (els.randomData) els.randomData.textContent = "等待 chart_analysis 输出 summary JSON";
+    // 仅首次进入随机模式时自动生成
+    if (!state.randomGenerated) {
+      state.randomReady = false;
+      if (els.randomStatus) els.randomStatus.textContent = "等待生成 Random 谱面...";
+      if (els.randomMeta) els.randomMeta.textContent = "BPM: -- · 时长: --:--";
+      if (els.randomCardImage) els.randomCardImage.src = "";
+      if (els.randomPreview) els.randomPreview.innerHTML = "";
+      if (els.randomData) els.randomData.textContent = "等待 chart_analysis 输出 summary JSON";
+      generateRandomChart(true);
+    }
   }
 }
 
@@ -93,10 +108,10 @@ async function runAnalysisAndLoadCharts() {
   try {
     await triggerAnalysisForAllCharts();
     await loadCharts();
-    if (els.normalStatus) els.normalStatus.textContent = "解析完成，正在加载谱面...";
+    if (els.normalStatus) els.normalStatus.textContent = "解析完成";
   } catch (err) {
     console.error(err);
-    if (els.normalStatus) els.normalStatus.textContent = "解析或加载失败，请检查后台服务。";
+    if (els.normalStatus) els.normalStatus.textContent = "解析或加载失败，请检查后台服务";
   }
 }
 
@@ -108,11 +123,11 @@ async function loadCharts() {
     state.charts = charts.filter((c) => c.name !== "Random");
     renderTrackList(state.charts);
     if (els.normalStatus) {
-      els.normalStatus.textContent = charts.length ? "悬停预览，点击选中。" : "未找到谱面，请检查 charts 目录。";
+      els.normalStatus.textContent = charts.length ? "悬停预览，点击选中" : "未找到谱面，请检查 charts 目录";
     }
   } catch (err) {
     console.error(err);
-    if (els.normalStatus) els.normalStatus.textContent = "加载失败，请检查后台服务。";
+    if (els.normalStatus) els.normalStatus.textContent = "加载失败，请检查后台服务";
   }
 }
 
@@ -127,7 +142,7 @@ async function fetchChartsFromBackend() {
       name: c.name,
       bpm: c.bpm || "?",
       duration: c.duration || "--:--",
-      folder: c.folder || `charts/${c.name}`,
+      folder: ensureChartsFolder(c.folder, c.name),
       analysisImages: (c.files || []).map((f) => `${BASE_PATH}chart_analysis/outputs/${f}`),
       analysisSummary: c.summary ? `${BASE_PATH}chart_analysis/outputs/${c.summary}` : null,
       audio: normalizeAudioPath(c),
@@ -147,12 +162,12 @@ function triggerAnalysisForAllCharts() {
   return triggerChartAnalysisRun();
 }
 
-function triggerChartAnalysisRun() {
+function triggerChartAnalysisRun(statusEl = els.normalStatus) {
   if (chartAnalysisPromise) {
     return chartAnalysisPromise;
   }
-  if (els.normalStatus) {
-    els.normalStatus.textContent = "请求 chart_analysis 运行...";
+  if (statusEl) {
+    statusEl.textContent = "请求 chart_analysis 运行...";
   }
   console.log("[frontend] POST", ANALYSIS_ENDPOINT);
   chartAnalysisPromise = (async () => {
@@ -166,14 +181,14 @@ function triggerChartAnalysisRun() {
         throw new Error(data.message || "chart_analysis 返回失败");
       }
       console.log("[frontend] chart_analysis success", data.message || "");
-      if (els.normalStatus) {
-        els.normalStatus.textContent = "chart_analysis 完成，准备加载协议文件...";
+      if (statusEl) {
+        statusEl.textContent = "chart_analysis 完成，准备加载协议文件...";
       }
       return true;
     } catch (err) {
       console.warn("chart_analysis request failed", err);
-      if (els.normalStatus) {
-        els.normalStatus.textContent = "chart_analysis 调用失败，请检查后台服务。";
+      if (statusEl) {
+        statusEl.textContent = "chart_analysis 调用失败，请检查后台服务";
       }
       if (els.toast) {
         showToast("chart_analysis 调用失败，请查看后台日志");
@@ -203,7 +218,7 @@ function renderTrackList(charts) {
     info.innerHTML = `
       <div class="track-name">${chart.name}</div>
       <div class="track-meta">BPM: ${chart.bpm || "?"} · 时长: ${formatDurationForDisplay(chart.duration_raw || chart.duration, chart.bpm)}</div>
-      <div class="track-meta">目录: ${chart.folder || "charts/??"}</div>
+      <div class="track-meta">目录: ${ensureChartsFolder(chart.folder, chart.name)}</div>
     `;
 
     const images = document.createElement("div");
@@ -372,8 +387,7 @@ function selectChart(chart, cardEl) {
   state.selectedChart = chart;
   document.querySelectorAll(".track-card").forEach((c) => c.classList.remove("selected"));
   if (cardEl) cardEl.classList.add("selected");
-  if (els.normalActions) els.normalActions.style.display = "flex";
-  if (els.previewMeta) els.previewMeta.textContent = `已选中：${chart.name} · 点击下方按钮写入 BPM & ROM 或打开 Quartus。`;
+  if (els.previewMeta) els.previewMeta.textContent = `已选中：${chart.name} · 点击下方按钮写入 BPM & ROM 或打开 Quartus`;
 }
 
 async function applyNormalSelection() {
@@ -425,27 +439,103 @@ function openQuartus() {
   })();
 }
 
-function generateRandomChart() {
+function generateRandomChart(auto = false) {
   if (els.randomStatus) els.randomStatus.textContent = "生成中（调用 chart_engine Random）...";
-  if (els.btnStartRandom) els.btnStartRandom.disabled = true;
   if (els.randomPreview) els.randomPreview.innerHTML = "";
   if (els.randomData) els.randomData.textContent = "等待 chart_analysis 输出 summary JSON";
+  if (els.randomMeta) els.randomMeta.textContent = "BPM: -- · 时长: --:--";
+  if (els.randomCardImage) els.randomCardImage.src = RANDOM_COVER;
+  if (auto) {
+    state.randomGenerated = true;
+  }
   (async () => {
     const ok = await runGenerateRandom();
-    state.randomReady = true;
-    if (els.btnStartRandom) els.btnStartRandom.disabled = false;
-    if (els.randomStatus) els.randomStatus.textContent = ok ? "生成完成，点击开始或重新生成。" : "生成失败，仍可尝试开始或重试生成。";
-    await loadRandomPreview();
-    showToast(ok ? "Random 谱面生成完成" : "Random 谱面生成失败（占位）");
+    if (!ok) {
+      state.randomReady = false;
+      if (els.randomStatus) els.randomStatus.textContent = "生成失败，仍可尝试开始或重试生成";
+      showToast("Random 谱面生成失败（占位）");
+      return;
+    }
+
+    // 生成成功后触发一次 chart_analysis，再加载预览
+    try {
+      await triggerChartAnalysisRun(els.randomStatus);
+      await loadRandomPreview();
+      state.randomReady = true;
+      if (els.randomStatus) els.randomStatus.textContent = "生成与分析完成";
+      showToast("Random 谱面生成并分析完成");
+    } catch (err) {
+      console.warn("Random chart_analysis failed", err);
+      state.randomReady = true; // 仍允许启动，但提示分析失败
+      if (els.randomStatus) els.randomStatus.textContent = "生成完成，但 chart_analysis 失败，请检查后台";
+      showToast("Random 已生成，但 chart_analysis 失败");
+    }
   })();
 }
 
-function startRandomBuild() {
+async function refreshRandomAnalysis() {
+  if (els.randomStatus) els.randomStatus.textContent = "手动刷新分析...";
+  try {
+    await triggerChartAnalysisRun(els.randomStatus);
+    await loadRandomPreview();
+    if (els.randomStatus) els.randomStatus.textContent = "分析完成，预览已更新";
+    showToast("随机谱面分析已刷新");
+  } catch (err) {
+    console.warn("refreshRandomAnalysis failed", err);
+    if (els.randomStatus) els.randomStatus.textContent = "分析刷新失败，请检查后台";
+    showToast("随机谱面分析刷新失败");
+  }
+}
+
+function applyRandomSelection() {
   if (!state.randomReady) {
     showToast("请先生成 Random 谱面");
     return;
   }
-  showToast("Random 模式：已请求写入并启动");
+  if (els.randomStatus) els.randomStatus.textContent = "调用 chart_engine 处理中：Random...";
+  (async () => {
+    const ok = await runChartEngine("Random");
+    if (ok) {
+      showToast("写入成功：Random");
+      if (els.randomStatus) els.randomStatus.textContent = "写入成功：Random";
+    } else {
+      showToast("写入失败：Random");
+      if (els.randomStatus) els.randomStatus.textContent = "写入失败：Random";
+    }
+  })();
+}
+
+function openRandomQuartus() {
+  if (!state.randomReady) {
+    showToast("请先生成 Random 谱面");
+    return;
+  }
+  openQuartus();
+}
+
+function playMusicSync(chartName) {
+  if (!chartName) {
+    showToast("缺少曲目名称");
+    return;
+  }
+  // backend player: ensure单实例，先请求 stop 再启动
+  const url = `${BASE_PATH}music_sync/play?name=${encodeURIComponent(chartName)}`;
+  (async () => {
+    try {
+      // 先尝试停止已有的任务（若无则忽略）
+      await fetch(`${BASE_PATH}music_sync/stop`, { method: "POST" }).catch(() => {});
+
+      const res = await fetch(url, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success !== true) {
+        throw new Error(data.message || `HTTP ${res.status}`);
+      }
+      showToast(`已触发软硬协同播放：${chartName}`);
+    } catch (err) {
+      console.warn("playMusicSync failed", err);
+      showToast("软硬协同播放失败，请检查后端服务");
+    }
+  })();
 }
 
 async function runGenerateRandom() {
@@ -468,26 +558,63 @@ async function loadRandomPreview() {
     const protocol = await res.json();
     const entry = protocol.charts?.find((c) => c.name === "Random");
     if (!entry) throw new Error("no Random entry in protocol");
-    renderPreviewImages((entry.files || []).map((f) => `${BASE_PATH}chart_analysis/outputs/${f}`), els.randomPreview);
-    renderSummary(entry.summary ? `${BASE_PATH}chart_analysis/outputs/${entry.summary}` : null, els.randomData);
+    const cacheBust = Date.now();
+    const images = (entry.files || []).map(
+      (f) => `${BASE_PATH}chart_analysis/outputs/${f}?t=${cacheBust}`
+    );
+    const summaryUrl = entry.summary
+      ? `${BASE_PATH}chart_analysis/outputs/${entry.summary}?t=${cacheBust}`
+      : null;
+    renderPreviewImages(images, els.randomPreview);
+    renderSummary(summaryUrl, els.randomData);
+    if (els.randomMeta) {
+      const bpmVal = entry.bpm || entry.BPM || "--";
+      const durVal = formatDurationForDisplay(entry.duration, entry.bpm || entry.BPM) || "--:--";
+      const countVal = entry.note_count || entry.noteCount;
+      const countText = typeof countVal === "number" ? ` · 物量: ${countVal}` : "";
+      els.randomMeta.textContent = `BPM: ${bpmVal} · 时长: ${durVal}${countText}`;
+    }
+    if (els.randomCardImage) {
+      els.randomCardImage.src = RANDOM_COVER;
+      els.randomCardImage.alt = "Random cover";
+    }
     return;
   } catch (err) {
     console.warn("loadRandomPreview failed", err);
     renderPreviewImages([`${BASE_PATH}chart_analysis/outputs/Random_dummy.png`], els.randomPreview);
     if (els.randomData) {
-      els.randomData.textContent = "占位 summary：请检查 chart_analysis/outputs/Random_summary.json 是否可访问。";
+      els.randomData.textContent = "占位 summary：请检查 chart_analysis/outputs/Random_summary.json 是否可访问";
+    }
+    if (els.randomMeta) {
+      els.randomMeta.textContent = "BPM: -- · 时长: --:--";
+    }
+    if (els.randomCardImage) {
+      els.randomCardImage.src = RANDOM_COVER;
     }
   }
 }
 
 function bindEvents() {
   if (els.overlay) els.overlay.addEventListener("click", startExperience);
+  if (els.btnChooseNormal) els.btnChooseNormal.addEventListener("click", () => {
+    if (els.modeChooser) els.modeChooser.classList.add("hidden");
+    if (els.modeBar) els.modeBar.classList.remove("hidden");
+    switchMode("normal");
+  });
+  if (els.btnChooseRandom) els.btnChooseRandom.addEventListener("click", () => {
+    if (els.modeChooser) els.modeChooser.classList.add("hidden");
+    if (els.modeBar) els.modeBar.classList.remove("hidden");
+    switchMode("random");
+  });
   if (els.btnModeNormal) els.btnModeNormal.addEventListener("click", () => switchMode("normal"));
   if (els.btnModeRandom) els.btnModeRandom.addEventListener("click", () => switchMode("random"));
   if (els.btnSelectNormal) els.btnSelectNormal.addEventListener("click", applyNormalSelection);
   if (els.btnOpenQuartus) els.btnOpenQuartus.addEventListener("click", openQuartus);
+  if (els.btnPlayNormal) els.btnPlayNormal.addEventListener("click", () => playMusicSync(state.selectedChart?.name));
   if (els.btnGenerateRandom) els.btnGenerateRandom.addEventListener("click", generateRandomChart);
-  if (els.btnStartRandom) els.btnStartRandom.addEventListener("click", startRandomBuild);
+  if (els.btnSelectRandom) els.btnSelectRandom.addEventListener("click", applyRandomSelection);
+  if (els.btnOpenRandom) els.btnOpenRandom.addEventListener("click", openRandomQuartus);
+  if (els.btnPlayRandom) els.btnPlayRandom.addEventListener("click", () => playMusicSync("Random"));
 }
 
 function init() {
