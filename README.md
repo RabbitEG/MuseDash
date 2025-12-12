@@ -23,6 +23,13 @@
 - `music_sync/doc/README.md`：播放接口与协同思路。
 - `charts/README.md`：谱面格式与校验要求。
 
+## 依赖安装与运行
+1. 确保已安装 Python 3.9+ 和 pip（推荐在虚拟环境中执行）。
+2. 在项目根目录安装统一依赖：
+   ```bash
+   pip install -r requirements.txt
+   ```
+
 ## 前端启动方式
 1. 终端切换到项目根目录 `MuseDash`
 2. 推荐使用带接口的本地服务（支持“打开 Quartus”等按钮）：
