@@ -34,3 +34,6 @@ stp1_auto_signaltap_0.txt
 
 # Chart analysis generated assets
 chart_analysis/outputs/
+
+# Generated random chart
+charts/Random/Random.txt
