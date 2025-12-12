@@ -7,7 +7,9 @@
 import os
 import sys
 import time
+import math
 import threading
+from array import array
 import pygame
 import keyboard
 
@@ -20,6 +22,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TICKS_PER_BEAT = 4
 
 pygame_inited = False
+CLICK_SOUND = None
 
 
 def _init_pygame():
@@ -103,7 +106,14 @@ def _parse_chart(chart_path):
 
 
 def _beep():
-    """简易节拍提示音。"""
+    """简易节拍提示音，优先用 pygame click，其次 winsound，再退控制台铃声。"""
+    snd = _get_click_sound()
+    if snd is not None:
+        try:
+            snd.play()
+            return
+        except Exception:
+            pass
     if winsound:
         try:
             winsound.Beep(880, 80)
@@ -113,6 +123,32 @@ def _beep():
     # 退化为控制台提示
     sys.stdout.write("\a")
     sys.stdout.flush()
+
+
+def _get_click_sound():
+    """生成/缓存一个短促的点击音，用于无 mp3 的节拍提示。"""
+    global CLICK_SOUND
+    if CLICK_SOUND is not None:
+        return CLICK_SOUND
+    _init_pygame()
+    if not pygame_inited:
+        return None
+    try:
+        sample_rate = 44100
+        duration = 0.06  # 秒
+        freq = 880
+        volume = 0.4
+        total_samples = int(sample_rate * duration)
+        samples = array("h")
+        for n in range(total_samples):
+            val = int(volume * 32767 * math.sin(2 * math.pi * freq * n / sample_rate))
+            samples.append(val)
+        snd = pygame.mixer.Sound(buffer=samples.tobytes())
+        CLICK_SOUND = snd
+        return snd
+    except Exception as exc:
+        print(f"[WARN] 生成点击音失败：{exc}")
+        return None
 
 
 def _play_timeline(chart_name, bpm, ticks, stop_evt):
