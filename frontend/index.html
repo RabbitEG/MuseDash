@@ -49,6 +49,14 @@
       flex-direction: column;
       gap: 16px;
     }
+    .content-inner {
+      width: 100%;
+      max-width: 960px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
     .start-overlay {
       position: absolute;
       inset: 0;
@@ -68,15 +76,44 @@
       pointer-events: none;
     }
     .start-title {
-      font-size: 32px;
-      font-weight: 700;
-      letter-spacing: 1px;
+      font-size: 60px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      text-shadow: 0 8px 30px rgba(255,107,155,0.35), 0 3px 10px rgba(0,0,0,0.4);
     }
     .start-sub {
-      margin-top: 12px;
+      margin-top: 120px;
       font-size: 16px;
       color: var(--text-sub);
     }
+    .mode-chooser {
+      display: flex;
+      flex-direction: row;
+      gap: 32px;
+      align-items: center;
+      justify-content: center;
+      min-height: 70vh;
+      flex-wrap: wrap;
+    }
+    .mode-chooser.hidden { display: none; }
+    .big-btn {
+      width: min(520px, 90vw);
+      padding: 50px 36px;
+      font-size: 26px;
+      font-weight: 800;
+      border-radius: 16px;
+      border: none;
+      cursor: pointer;
+      color: #0b0d12;
+      background: linear-gradient(135deg, #ff6b9b, #ff8fb5);
+      box-shadow: 0 18px 48px rgba(255,107,155,0.38);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .big-btn.secondary {
+      background: linear-gradient(135deg, #5ac8fa, #7ad9ff);
+      box-shadow: 0 18px 48px rgba(90,200,250,0.32);
+    }
+    .big-btn:hover { transform: translateY(-3px) scale(1.025); }
     .mode-bar {
       display: flex;
       gap: 12px;
@@ -100,6 +137,11 @@
     .btn.secondary {
       background: var(--accent-2);
       box-shadow: 0 10px 30px rgba(90,200,250,0.22);
+    }
+    .btn.tertiary {
+      background: linear-gradient(135deg, #b97cff, #8b5cf6);
+      box-shadow: 0 10px 30px rgba(185,124,255,0.25);
+      color: #0b0d12;
     }
     .btn:disabled {
       opacity: 0.6;
@@ -261,43 +303,63 @@
         <div class="start-title">Muse Dash On FPGA</div>
         <div class="start-sub">点击任意位置开始</div>
       </div>
-
-      <div id="normalPanel" class="panel hidden">
-        <div class="panel-header">
-          <div class="panel-title">请选择谱面：</div>
-          <div id="normalStatus" class="status">等待加载谱面...</div>
-        </div>
-        <div id="trackList" class="track-list"></div>
-        <div class="preview">
-          <div id="previewMeta" class="preview-meta">将鼠标悬停在曲目卡片上即可放大并预览音乐。</div>
-          <div id="previewImages" class="preview-images"></div>
-          <pre id="previewData" class="summary-box">谱面信息生成中...</pre>
-          <div id="normalActions" class="action-row" style="display:none;">
-            <button id="btn-select-normal" class="btn">写入谱面信息</button>
+      <div id="modeChooser" class="mode-chooser hidden">
+        <button id="btn-choose-random" class="big-btn secondary">随机模式</button>
+        <button id="btn-choose-normal" class="big-btn">普通模式</button>
+      </div>
+      <div class="content-inner">
+        <div id="normalPanel" class="panel hidden">
+          <div class="panel-header">
+            <div class="panel-title">请选择谱面：</div>
+            <div id="normalStatus" class="status">等待加载谱面...</div>
+          </div>
+          <div id="trackList" class="track-list"></div>
+          <div class="action-row">
+            <button id="btn-select-normal" class="btn secondary">写入谱面信息</button>
             <button id="btn-open-quartus" class="btn secondary">将谱面载入到 FPGA</button>
+            <button id="btn-play-normal" class="btn tertiary">软硬协同音乐播放</button>
+          </div>
+          <div class="preview">
+            <div id="previewMeta" class="preview-meta">将鼠标悬停在曲目卡片上即可放大并预览音乐。</div>
+            <div id="previewImages" class="preview-images"></div>
+            <pre id="previewData" class="summary-box">谱面信息生成中...</pre>
           </div>
         </div>
-      </div>
 
-      <div id="randomPanel" class="panel hidden">
-        <div class="panel-header">
-          <div class="panel-title">随机模式</div>
-          <div id="randomStatus" class="status">等待生成随机谱面...</div>
+        <div id="randomPanel" class="panel hidden">
+          <div class="panel-header">
+            <div class="panel-title">随机模式</div>
+            <div id="randomStatus" class="status">等待生成随机谱面...</div>
+          </div>
+          <div class="track-card" style="margin-top:6px;">
+            <div class="track-content">
+              <div class="track-info">
+                <div class="track-name">Random</div>
+                <div id="randomMeta" class="track-meta">BPM: -- · 时长: --:--</div>
+                <div class="track-meta">目录: charts/Random</div>
+              </div>
+              <div class="track-images">
+                <img id="randomCardImage" src="" alt="Random cover" />
+              </div>
+            </div>
+          </div>
+          <div class="action-row">
+            <button id="btn-generate-random" class="btn">重新生成</button>
+            <button id="btn-select-random" class="btn secondary">写入谱面信息</button>
+            <button id="btn-open-random" class="btn secondary">将谱面载入到 FPGA</button>
+            <button id="btn-play-random" class="btn tertiary">软硬协同音乐播放</button>
+          </div>
+          <div class="preview" style="margin-top:12px;">
+            <div class="preview-meta">谱面信息统计：</div>
+            <div id="randomPreview" class="preview-images"></div>
+            <pre id="randomData" class="summary-box">等待生成随机谱面分析数据</pre>
+          </div>
         </div>
-        <div class="action-row">
-          <button id="btn-generate-random" class="btn">重新生成</button>
-          <button id="btn-start-random" class="btn secondary" disabled>开始（写入后启动）</button>
-        </div>
-        <div class="preview" style="margin-top:12px;">
-          <div class="preview-meta">生成后将展示谱面分析图。</div>
-          <div id="randomPreview" class="preview-images"></div>
-          <pre id="randomData" class="summary-box">等待生成随机谱面分析数据</pre>
-        </div>
-      </div>
 
-      <div id="modeBar" class="mode-bar hidden">
-        <button id="btn-mode-random" class="btn secondary">随机模式</button>
-        <button id="btn-mode-normal" class="btn">普通模式</button>
+        <div id="modeBar" class="mode-bar hidden">
+          <button id="btn-mode-random" class="btn secondary">随机模式</button>
+          <button id="btn-mode-normal" class="btn">普通模式</button>
+        </div>
       </div>
     </div>
   </div>
