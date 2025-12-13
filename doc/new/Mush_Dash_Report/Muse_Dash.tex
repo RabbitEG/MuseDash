@@ -249,11 +249,169 @@
 
 \subsection{谱面转 ROM}
 
-\subsection{随机谱面生成与校验}
+\subsection{核心引擎 (Chart Engine)}
 
-\subsection{音乐播放}
+核心引擎模块充当数据转换层的角色，负责将抽象的谱面对象转换为硬件可理解的二进制数据，同时提供随机生成与格式校验功能。该模块包含三个核心子系统：谱面校验、随机生成与 ROM 编译。
 
-\subsection{软硬协同方案探索}
+\subsubsection{谱面校验函数 (Chart Check)}
+
+谱面校验函数是 Chart 引擎的基础组件，采用“早期失败 (Fail-fast)”策略，确保在谱面生成或 ROM 编译前拦截所有格式错误。
+
+\paragraph{1. 谱面格式定义}
+谱面文件采用轻量级文本格式：
+\begin{itemize}
+    \item \textbf{头部声明}：第一行必须为 \texttt{bpm=<整数>}。
+    \item \textbf{事件行}：后续行为三元组 \texttt{(time, type, trace)}。
+    \begin{itemize}
+        \item \texttt{time}：非负整数，表示时间点（节拍数）。
+        \item \texttt{type}：事件类型，包括 \texttt{tap}, \texttt{hold\_start}, \texttt{hold\_mid}。
+        \item \texttt{trace}：轨道编号，0 或 1。
+    \end{itemize}
+\end{itemize}
+
+\paragraph{2. 四阶段校验逻辑}
+校验过程分为四个严格的阶段：
+\begin{enumerate}
+    \item \textbf{基础检查}：验证文件存在性与非空性。
+    \item \textbf{BPM 校验}：利用正则表达式提取并验证 BPM 是否为正整数。
+    \item \textbf{事件逻辑校验}（核心难点）：函数维护全局状态 \texttt{last\_time} 和轨道状态 \texttt{last\_by\_trace}，执行以下检查：
+    \begin{itemize}
+        \item \textbf{全局时间单调性}：允许不同轨道在同一时间点触发，但整体时间轴必须单调不减。
+        \item \textbf{同轨严格递增}：同一轨道上的事件时间必须严格递增，禁止冲突。
+        \item \textbf{长条连续性}：\texttt{hold\_mid} 必须紧接在同轨道的 \texttt{hold\_start} 或 \texttt{hold\_mid} 之后，且时间差必须严格为 1 ($T_{current} - T_{last} = 1$)。
+    \end{itemize}
+    \item \textbf{闭合性检查}：遍历结束后，检查所有轨道是否存在未闭合的 \texttt{hold\_start}，确保每个长条都有始有终。
+\end{enumerate}
+
+该算法采用单次遍历方式，时间复杂度为 $O(n)$，在保证性能的同时提供了精确到行的错误定位。
+
+\subsubsection{随机谱面生成函数 (Random Generator)}
+
+该模块实现了基于概率分布的自动化谱面生成，支持指定 BPM、时长及随机种子 (Seed)，确保了测试用例的可复现性。
+
+\paragraph{1. 生成算法}
+算法基于节拍循环生成，总节拍数计算公式为：
+\begin{equation}
+    MaxLength = \frac{BPM \times LengthSeconds}{60}
+\end{equation}
+生成循环从 $t=0$ 开始，每次迭代生成一个 2 到 6 之间的随机时间间隔，直到达到总节拍数。
+
+\paragraph{2. 概率控制模型}
+\begin{itemize}
+    \item \textbf{事件类型分布}：
+    \begin{itemize}
+        \item \textbf{Tap (单点)}：85\% 概率。
+        \item \textbf{Hold (长条)}：15\% 概率。长条长度在 3 到 8 之间随机，且首尾可选择性添加 Tap 事件以增加复杂度。
+    \end{itemize}
+    \item \textbf{轨道分布}：通过随机数 (1-3) 控制生成位置：仅轨道 0、仅轨道 1 或双轨并发。
+\end{itemize}
+
+\paragraph{3. 鲁棒性设计}
+函数内置了完整的异常处理机制，对文件创建失败或写入失败的情况进行捕获。生成的谱面文件严格遵循标准格式，可直接输入到校验模块进行二次验证。
+
+\subsubsection{ROM 生成与硬件映射 (ROM Generation)}
+
+这是连接软件与 FPGA 硬件的关键桥梁。函数 \texttt{process\_chart} 负责将文本谱面编译为 Verilog ROM 模块，并自动同步系统时钟参数。
+
+\paragraph{1. 数据编码策略}
+为了在有限的存储空间内表示双轨并发事件，我们设计了 4 位宽的编码格式。每个时间地址 $Addr$ 对应 4 位数据：
+\begin{itemize}
+    \item \textbf{低 2 位 (Bit 1:0)}：对应轨道 0 (NoteDown)。
+    \item \textbf{高 2 位 (Bit 3:2)}：对应轨道 1 (NoteUp)。
+\end{itemize}
+状态映射表如下：
+\begin{itemize}
+    \item \texttt{00}：无事件 (None)
+    \item \texttt{01}：点击 (Tap)
+    \item \texttt{10}：长按开始 (Hold Start)
+    \item \texttt{11}：长按保持 (Hold Mid)
+\end{itemize}
+这种位域设计允许通过位掩码操作独立更新每个轨道的数据，实现了双轨事件的并行存储。
+
+\paragraph{2. 自动 BPM 同步}
+硬件系统使用固定频率的时钟，需要根据曲目 BPM 动态调整分频系数。函数自动提取谱面 BPM，并计算分频阈值：
+\begin{equation}
+    div\_cnt = \frac{SystemFreq}{BPM} = \frac{375,000,000}{BPM}
+\end{equation}
+计算结果会通过正则表达式自动注入到顶层 Verilog 模块的参数定义中，实现了软硬件的无缝同步。
+
+\paragraph{3. ROM 深度自适应}
+为了适配硬件地址解码，ROM 的深度必须调整为 2 的幂次（如 1024, 2048, 4096）。函数会扫描谱面最大时间戳 $T_{max}$，计算满足 $2^N > T_{max}$ 的最小 $N$ 值。考虑到硬件资源限制（地址位宽 12 位），最大深度限制为 4096。
+
+\paragraph{4. Verilog 代码生成}
+函数最终输出标准的 \texttt{ROM.v} 文件，包含模块声明与初始化块 (\texttt{initial begin ... end})。生成的代码示例如下：
+
+\begin{verbatim}
+module ROM (
+    input [11:0] addr,
+    output reg [1:0] noteup,
+    output reg [1:0] notedown
+);
+    reg [3:0] ROM [0:15];
+    initial begin
+        ROM[0] = 4'b0001; // Time 0: Track 0 Tap
+        ROM[5] = 4'b0100; // Time 5: Track 1 Tap
+        // ...
+    end
+    always @(*) begin
+        {noteup, notedown} = ROM[addr];
+    end
+endmodule
+\end{verbatim}
+
+\subsection{music\_sync模块说明}
+
+\subsubsection{监听键盘及音乐播放}
+
+该模块实现了一个简单的“按空格播放音频”功能。当模块调用时，用户按下空格立即播放对应音乐，若指定路径中无同名音乐，则播放一段默认节拍。
+
+模块顶部根据当前文件目录计算 \texttt{BASE\_DIR}，并定位一个回退默认音频文件 \texttt{DEFAULT}。模块主接口是 \textbf{\texttt{listen\_and\_play(chart\_name)}}，它接受一个曲目名或文件路径，若传入的是曲目名则按约定路径 \texttt{charts/<曲目名>/<曲目名>.mp3} 查找音频，找不到时回退到 \texttt{DEFAULT}。
+
+初始化方面，\texttt{\_init\_pygame()} 用一个模块级布尔变量 \texttt{pygame\_inited} 做“只初始化一次”的标志：首次调用时尝试运行 \texttt{pygame.mixer.init()}，成功则把标志设为 \texttt{True}，失败则捕获异常并打印错误信息。该实现避免了重复初始化。
+
+音频播放由 \texttt{\_play\_async(path)} 完成：先检查路径存在性，然后启动一个守护线程执行加载并播放操作。线程内先调用 \texttt{\_init\_pygame()} 确保 mixer 已就绪，再用 \texttt{pygame.mixer.music.load/play()} 播放。使用守护线程意味着如果主线程很快退出，播放线程会被强制终止；同时 \texttt{pygame.mixer.music} 是单通道播放，快速连续触发会中断正在播放的音轨，并重新播放音频。
+
+\texttt{listen\_and\_play(chart\_name)} 的主循环使用 \texttt{keyboard.is\_pressed("space")} 轮询检测空格按下事件，触发后调用 \texttt{\_play\_async} 并通过 \texttt{time.sleep(0.3)} 做简单去抖，避免长按重复触发，主循环每次迭代以 0.01s sleep 降低 CPU 占用。按 Ctrl+C 可以中断并退出监听。\texttt{main()} 为调试入口，可调用 \texttt{listen\_and\_play} 直接运行测试。
+
+\begin{itemize}
+    \item 需要安装的 python 依赖库：\texttt{pygame}/\texttt{keyboard}
+    \item MuseDash-main 目录下调用调试命令：\texttt{python music\_sync/player.py songName}
+\end{itemize}
+
+\subsection{软硬件协同方案}
+
+\begin{itemize}
+    \item \textbf{方案一：PC 键盘 $\rightarrow$ 软件捕获 $\rightarrow$ 串口（UART）$\rightarrow$ FPGA}
+    \begin{itemize}
+        \item 用户通过键盘在 PC 端按下空格键后，软件立即捕获该事件，并通过 UART 串口向 FPGA 发送标准化控制指令帧，例如包含播放启动标志位与 BPM 参数的数据包。FPGA 内部通过 UART 接收模块解析命令，并驱动 Address Generator 与节拍计数器从零时刻开始运行，从而实现音乐播放起始点与谱面滚动的同步。
+        \item 优点：软硬件接口简单、协议可定制、调试直观、时延可控
+        \item 缺点：串口本身存在缓冲与时序抖动，时间精度一般，通常在毫秒级
+    \end{itemize}
+
+    \item \textbf{方案二：USB HID 键盘直通 FPGA（硬件级 USB 输入）}
+    \begin{itemize}
+        \item 将键盘直接接入 FPGA，由 FPGA 作为 USB 主机对 USB HID 键盘进行枚举和轮询，从而绕过 PC 端的操作系统与软件栈，使按键事件直接驱动硬件状态机。结构为键盘 $\rightarrow$ FPGA USB Host 控制器 $\rightarrow$ HID 解码 $\rightarrow$ 播放/节拍控制 FSM。
+        \item 优点：无串口依赖，时序稳定性好（USB HID 的轮询周期通常固定在 1ms 左右，事件响应路径更短）
+        \item 缺点：需要在 FPGA 内实现完整的 USB Host 协议栈与 HID 协议解析模块，对逻辑资源和开发经验要求较高，不适合快速原型开发场景
+    \end{itemize}
+
+    \item \textbf{方案三：PC 键盘 $\rightarrow$ 软件 $\rightarrow$ GPIO 脉冲 $\rightarrow$ FPGA（低延迟硬件触发）}
+    \begin{itemize}
+        \item 这是一种基于 GPIO 的硬件触发方式。该方案中，上位机软件在检测到键盘事件后，通过 USB-GPIO 转换模块或单片机输出一个标准 TTL 电平的短脉冲信号，该脉冲直接接入 FPGA 的通用 I/O 引脚。FPGA 在检测到该引脚的上升沿后立即清零内部计数器并启动播放状态机。
+        \item 优点：延迟极低（省去串口协议解析过程），同步精准，比串口稳定，适合对实时性要求较高的音乐节奏类应用
+        \item 缺点：需要额外的硬件接口电路，系统集成时要额外考虑电气兼容性与可靠性
+    \end{itemize}
+
+    \item \textbf{方案四：USB HID 设备增加一条“同步通道”（高级软硬件协同）}
+    \begin{itemize}
+        \item 这是一种基于 USB 复合设备的同步架构。该方案通过在系统中构建一个同时具有标准 HID 键盘接口和自定义控制接口的 USB 设备，使 FPGA 能够直接通过 USB 通道接收按键数据和专用同步指令。
+        \item 优点：接口统一、扩展性强，可以在同一物理链路上实现多通道控制和状态反馈，工业设备常用
+        \item 缺点：需要在 FPGA 内实现 USB Device 协议栈及自定义 HID 报告解析，软硬件复杂度高，实现成本高
+    \end{itemize}
+\end{itemize}
+
+综合系统可靠性、实现难度与开发周期等因素，对于当前 MuseDash 系统而言，最适合采用“PC 键盘 $\rightarrow$ 上位机软件 $\rightarrow$ UART 串口 $\rightarrow$ FPGA”这一协同架构。该架构既可以满足基本的播放启动与节拍同步需求，也便于在后续阶段引入时间戳校准机制或硬件脉冲触发机制进行性能优化。通过在 FPGA 端加入简单的串口命令解析逻辑并与现有 Address Generator、Judgement FSM 和 Score Accumulator 模块联动，可以在不大幅增加系统复杂度的前提下，实现稳定可靠的软硬件协同控制效果。
+
 
 
 \section{硬件设计}
