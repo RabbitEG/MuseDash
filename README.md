@@ -36,7 +36,6 @@
    ```bash
    python server.py --port 8000
    ```
-   若仍用 `python -m http.server 8000` 只能浏览静态页面，API 按钮不会生效。
 3. 浏览器打开：
    ```
    http://localhost:8000/frontend/
