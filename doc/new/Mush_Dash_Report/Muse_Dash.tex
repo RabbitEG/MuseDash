@@ -69,7 +69,7 @@
 
 \subsection{项目背景与实验要求}
 在嵌入式系统设计课程实验提供的三个选题方向（CPU扩展、VGA游戏、Web控制）中，我们选择了题目二：基于 FPGA 的 VGA 游戏设计与改进。
-基于题目要求，本项目在 Altera DE2-115 FPGA 开发板上复刻了游戏Muse Dash，不仅在硬件层面上实现了游戏的判定与显示模块，而且还构建了一套 Python 环境的上位机工具链，打通了从谱面解析、算法处理、自动生成 ROM 代码到板级验证的完整闭环，实现了高度自动化的软硬件协同开发流程。
+基于题目要求，本项目在 Altera DE2-115 FPGA 开发板上复刻了游戏Muse Dash，不仅在硬件层面上实现了游戏的判定与显示模块，而且还构建了一套基于 Python 环境的上位机工具链，打通了从谱面解析、算法处理、自动生成 ROM 代码到板级验证的完整闭环，实现了高度自动化的软硬件协同开发流程。
 
 \subsection{系统整体设计}
 本项目复刻了知名节奏游戏 \textbf{Muse Dash（喵斯快跑）} 的核心玩法。
@@ -101,12 +101,11 @@
     \item[林炫达] 
     \begin{itemize}
         \item \textbf{谱面可视化分析}：实现 \texttt{chart\_analysis} 模块，开发谱面内容的深度统计逻辑与可视化绘图引擎。
-        \item \textbf{数据验证}：通过统计数据（如 Note 总数、密度分布）对比硬件运行结果，辅助定位软硬件数据传输中的解析错误。
     \end{itemize}
     
     \item[薛文宵] 
     \begin{itemize}
-        \item \textbf{核心引擎}：负责 \texttt{chart\_engine} 模块，实现谱面校验、BPM 更新及随机生成算法。
+        \item \textbf{谱面核心引擎}：负责 \texttt{chart\_engine} 模块，实现谱面校验、BPM 更新及随机谱面生成。
     \end{itemize}
     
     \item[孟思思] 
@@ -247,99 +246,196 @@
     \item 生成热力图，展示音符在时间和轨道上的热力分布。
 \end{itemize}
 
-\subsection{谱面转 ROM}
 
-\subsection{核心引擎 (Chart Engine)}
+\subsection{谱面引擎模块(Chart Engine)}
 
-核心引擎模块充当数据转换层的角色，负责将抽象的谱面对象转换为硬件可理解的二进制数据，同时提供随机生成与格式校验功能。该模块包含三个核心子系统：谱面校验、随机生成与 ROM 编译。
+本章节详细阐述了谱面引擎的三个核心组件：谱面校验、随机生成以及 ROM 编译。
 
-\subsubsection{谱面校验函数 (Chart Check)}
+\subsubsection{谱面校验函数 (chart\_check)}
 
-谱面校验函数是 Chart 引擎的基础组件，采用“早期失败 (Fail-fast)”策略，确保在谱面生成或 ROM 编译前拦截所有格式错误。
+\paragraph{功能概述}
+谱面校验函数是 Chart 引擎的基础组件，负责对谱面文件进行全面的格式检查和逻辑验证，确保谱面文件符合游戏引擎的要求。该函数在谱面生成、ROM 编译等关键流程中起到质量保障作用，能够有效防止因格式错误导致的系统异常。实现采用早期失败策略，一旦发现错误立即返回并输出详细的错误信息，包括错误类型、出错行号和具体错误值，这大大提高了问题定位的效率。
 
-\paragraph{1. 谱面格式定义}
-谱面文件采用轻量级文本格式：
+\paragraph{实现思路}
+谱面文件采用简洁的文本格式：
 \begin{itemize}
-    \item \textbf{头部声明}：第一行必须为 \texttt{bpm=<整数>}。
-    \item \textbf{事件行}：后续行为三元组 \texttt{(time, type, trace)}。
-    \begin{itemize}
-        \item \texttt{time}：非负整数，表示时间点（节拍数）。
-        \item \texttt{type}：事件类型，包括 \texttt{tap}, \texttt{hold\_start}, \texttt{hold\_mid}。
-        \item \texttt{trace}：轨道编号，0 或 1。
-    \end{itemize}
+    \item 第一行为 BPM 值声明，格式为 \texttt{bpm=<整数>}。
+    \item 后续行为事件行，格式为 \texttt{(time,type,trace)}。其中 \texttt{time} 表示事件发生的时间点（非负整数），\texttt{type} 表示事件类型（\texttt{tap}、\texttt{hold\_start}、\texttt{hold\_mid}），\texttt{trace} 表示轨道编号（0 或 1）。
 \end{itemize}
 
-\paragraph{2. 四阶段校验逻辑}
-校验过程分为四个严格的阶段：
+校验过程分为四个主要阶段：文件读取与基础检查、BPM 格式校验、事件行逐行校验和长条闭合检查。
+
+在文件读取阶段，函数首先验证文件存在性和非空性。随后检查第一行的 BPM 格式，确保以 \texttt{bpm=} 开头且值为正整数。对于事件行的校验，函数维护两个关键状态：全局上一个事件的时间值 \texttt{last\_time} 和每个轨道上一个事件的信息 \texttt{last\_by\_trace}。对每个事件行，函数首先使用正则表达式进行格式匹配，然后依次验证：
 \begin{enumerate}
-    \item \textbf{基础检查}：验证文件存在性与非空性。
-    \item \textbf{BPM 校验}：利用正则表达式提取并验证 BPM 是否为正整数。
-    \item \textbf{事件逻辑校验}（核心难点）：函数维护全局状态 \texttt{last\_time} 和轨道状态 \texttt{last\_by\_trace}，执行以下检查：
-    \begin{itemize}
-        \item \textbf{全局时间单调性}：允许不同轨道在同一时间点触发，但整体时间轴必须单调不减。
-        \item \textbf{同轨严格递增}：同一轨道上的事件时间必须严格递增，禁止冲突。
-        \item \textbf{长条连续性}：\texttt{hold\_mid} 必须紧接在同轨道的 \texttt{hold\_start} 或 \texttt{hold\_mid} 之后，且时间差必须严格为 1 ($T_{current} - T_{last} = 1$)。
-    \end{itemize}
-    \item \textbf{闭合性检查}：遍历结束后，检查所有轨道是否存在未闭合的 \texttt{hold\_start}，确保每个长条都有始有终。
+    \item 事件类型有效性；
+    \item 轨道编号有效性；
+    \item 时间值非负性；
+    \item 全局时间单调性（允许不同轨道在同一时间点有事件，但整体时间必须单调不减）；
+    \item 同轨时间严格递增（同一轨道上的事件时间必须严格递增，不允许相等）。
 \end{enumerate}
 
-该算法采用单次遍历方式，时间复杂度为 $O(n)$，在保证性能的同时提供了精确到行的错误定位。
+长条事件的校验是函数的核心难点。要求 \texttt{hold\_mid} 必须紧接在 \texttt{hold\_start} 或 \texttt{hold\_mid} 之后，且时间差必须为 1，这意味着长条事件必须是连续的时间序列。同时，\texttt{hold\_start} 后必须跟随连续的 \texttt{hold\_mid}，直到长条结束，不能出现 \texttt{hold\_start} 后直接跟其他类型事件的情况。在遍历结束后，还会检查所有轨道是否有未闭合的 \texttt{hold\_start}，确保每个长条事件都被正确闭合。
 
-\subsubsection{随机谱面生成函数 (Random Generator)}
-
-该模块实现了基于概率分布的自动化谱面生成，支持指定 BPM、时长及随机种子 (Seed)，确保了测试用例的可复现性。
-
-\paragraph{1. 生成算法}
-算法基于节拍循环生成，总节拍数计算公式为：
-\begin{equation}
-    MaxLength = \frac{BPM \times LengthSeconds}{60}
-\end{equation}
-生成循环从 $t=0$ 开始，每次迭代生成一个 2 到 6 之间的随机时间间隔，直到达到总节拍数。
-
-\paragraph{2. 概率控制模型}
+\paragraph{代码结构说明}
+核心函数是 \texttt{chart\_check(chart\_name, chart\_path=None)}，接受曲目名称和可选的谱面文件路径作为参数，返回布尔值表示校验是否通过。
 \begin{itemize}
-    \item \textbf{事件类型分布}：
+    \item 函数内部首先调用辅助函数 \texttt{\_resolve\_chart\_path} 解析谱面文件路径，如果未提供路径则使用默认路径 \texttt{charts/<chart\_name>/<chart\_name>.txt}。
+    \item 定义了三个关键常量：\texttt{\_EVENT\_PATTERN} 是用于匹配事件行格式的正则表达式，\texttt{\_ALLOWED\_TYPES} 定义了允许的事件类型集合，\texttt{\_ALLOWED\_TRACES} 定义了允许的轨道编号集合。
+\end{itemize}
+
+校验过程采用单次遍历的方式，时间复杂度为 $O(n)$，其中 $n$ 为事件行数。实现使用正则表达式进行格式匹配，效率较高，内存占用小，仅维护必要的状态信息。这种设计使得函数具有良好的性能表现，即使对于包含大量事件的谱面文件也能快速完成校验。
+
+\paragraph{简单示例}
+一个有效的谱面示例如下所示。该谱面包含 BPM 声明、单点事件和长条事件，所有事件都符合格式要求和逻辑约束。单点事件 \texttt{(0,tap,0)} 和 \texttt{(5,tap,1)} 分别位于不同轨道，时间单调递增。长条事件从时间 10 开始，包含 \texttt{hold\_start} 和三个连续的 \texttt{hold\_mid}，时间差均为 1，符合长条事件的连续性要求。
+
+\begin{verbatim}
+bpm=120
+(0,tap,0)
+(5,tap,1)
+(10,hold_start,0)
+(11,hold_mid,0)
+(12,hold_mid,0)
+(13,hold_mid,0)
+(15,tap,1)
+\end{verbatim}
+
+常见的错误情况包括时间不单调（如第二行时间值小于第一行）、同轨时间不严格递增（如同一轨道上出现相同时间的事件）、\texttt{hold\_mid} 前没有 \texttt{hold\_start}（长条事件必须以 \texttt{hold\_start} 开始）以及 \texttt{hold\_start} 未闭合（长条事件必须以 \texttt{hold\_mid} 结尾）。函数能够准确识别这些错误并输出相应的错误信息。
+
+\paragraph{工作流程}
+校验流程如下：
+\begin{enumerate}
+    \item 从解析文件路径开始，首先检查文件是否存在，如果不存在则返回错误。
+    \item 文件存在后读取文件内容，检查文件是否为空，如果为空则返回错误。
+    \item 检查第一行的 BPM 格式，如果格式不正确则返回错误。
+    \item BPM 格式正确后，初始化校验状态，包括全局时间记录和每个轨道的事件记录。
+    \item 进入事件行遍历循环：
     \begin{itemize}
-        \item \textbf{Tap (单点)}：85\% 概率。
-        \item \textbf{Hold (长条)}：15\% 概率。长条长度在 3 到 8 之间随机，且首尾可选择性添加 Tap 事件以增加复杂度。
+        \item 对每个事件行首先进行格式匹配，如果格式不正确则返回错误。
+        \item 格式正确后提取时间、类型和轨道信息，依次校验事件类型有效性、轨道编号有效性、时间值非负性、全局时间单调性和同轨时间严格递增。
+        \item 对于 \texttt{hold\_mid} 事件，额外检查是否紧接在前一个同轨的 \texttt{hold\_start} 或 \texttt{hold\_mid} 之后且时间差为 1。
+        \item 对于非 \texttt{hold\_mid} 事件，如果前一个同轨事件是 \texttt{hold\_start}，则必须当前事件是 \texttt{hold\_mid}，否则返回错误。
+        \item 每个事件校验通过后更新状态记录，继续处理下一个事件。
     \end{itemize}
-    \item \textbf{轨道分布}：通过随机数 (1-3) 控制生成位置：仅轨道 0、仅轨道 1 或双轨并发。
-\end{itemize}
+    \item 所有事件处理完成后，检查是否有未闭合的 \texttt{hold\_start}，如果有则返回错误，否则返回校验通过。
+\end{enumerate}
 
-\paragraph{3. 鲁棒性设计}
-函数内置了完整的异常处理机制，对文件创建失败或写入失败的情况进行捕获。生成的谱面文件严格遵循标准格式，可直接输入到校验模块进行二次验证。
+\subsubsection{随机谱面生成函数 (generate\_random\_chart)}
 
-\subsubsection{ROM 生成与硬件映射 (ROM Generation)}
+\paragraph{功能概述}
+随机谱面生成函数实现了基于概率的随机谱面生成功能，能够根据指定的 BPM、时长、随机种子等参数自动生成符合格式要求的谱面文件。该函数采用基于节拍的循环生成策略，通过概率控制事件类型分布，生成包含单点事件和长条事件的随机谱面。支持随机种子功能，确保相同种子能够生成完全相同的谱面，这对于测试和调试具有重要意义。生成的谱面文件可以直接用于后续的校验和 ROM 编译流程。
 
-这是连接软件与 FPGA 硬件的关键桥梁。函数 \texttt{process\_chart} 负责将文本谱面编译为 Verilog ROM 模块，并自动同步系统时钟参数。
+\paragraph{实现思路}
+核心思想是在节拍序列上随机生成事件，使用概率控制事件类型的分布。
+首先根据 BPM 和时长计算总节拍数，公式为：
+\[ maxlength = \frac{bpm \times length\_seconds}{60} \]
+然后从节拍位置 0 开始，循环生成事件直到达到总节拍数。每次循环中，函数首先生成一个 2 到 6 之间的随机整数作为事件间隔，然后生成一个 1 到 100 之间的随机数用于决定事件类型，最后生成一个 1 到 3 之间的随机数用于决定轨道选择。
 
-\paragraph{1. 数据编码策略}
-为了在有限的存储空间内表示双轨并发事件，我们设计了 4 位宽的编码格式。每个时间地址 $Addr$ 对应 4 位数据：
+事件类型的选择基于概率分布：
 \begin{itemize}
-    \item \textbf{低 2 位 (Bit 1:0)}：对应轨道 0 (NoteDown)。
-    \item \textbf{高 2 位 (Bit 3:2)}：对应轨道 1 (NoteUp)。
+    \item 当随机数小于等于 85 时生成单点事件 (\texttt{tap})，概率为 85\%；
+    \item 当随机数大于 85 时生成长条事件 (\texttt{hold})，概率为 15\%。
 \end{itemize}
-状态映射表如下：
+这种分布设计使得生成的谱面以单点事件为主，长条事件作为点缀，符合大多数音乐游戏的谱面特征。
+
+轨道选择有三种情况：\texttt{trace} 为 1 时仅在轨道 0 生成事件，\texttt{trace} 为 2 时仅在轨道 1 生成事件，\texttt{trace} 为 3 时在双轨道同时生成事件，这增加了谱面的多样性和挑战性。
+
+对于单点事件，函数根据轨道选择在相应位置生成 \texttt{tap} 事件，然后更新节拍位置为当前位置加上事件间隔。
+对于长条事件，首先生成一个 3 到 8 之间的随机数作为长条长度，然后生成两个额外的随机数用于决定是否在长条首尾添加额外的单点事件（这种设计增加了谱面的复杂度）。长条事件的生成采用循环方式，在循环的开始位置生成 \texttt{hold\_start}，在中间位置生成 \texttt{hold\_mid}，在结束位置生成最后一个 \texttt{hold\_mid}。长条生成完成后，更新节拍位置为当前位置加上事件间隔再加上长条长度减一。
+
+\paragraph{代码结构说明}
+核心函数是 \texttt{generate\_random\_chart(output\_dir, name="Random", bpm=120, length\_seconds=60, seed=None)}，接受输出目录、文件名、BPM、时长和随机种子作为参数，返回生成的文件路径或 None（表示失败）。
+
+函数首先设置随机种子（如果提供），这确保了相同种子能够生成相同的谱面。然后创建输出文件，如果目录不存在则自动创建。接下来计算总节拍数并初始化事件列表，列表的第一项为 BPM 声明行。
+
+生成过程采用 while 循环，循环条件为当前节拍位置小于总节拍数。在循环内部，根据随机数决定生成单点事件还是长条事件，然后根据轨道选择生成相应的事件行并添加到事件列表中。所有事件生成完成后，将事件列表写入文件。实现还包含一个测试函数 \texttt{test\_generate\_random\_chart()}，其中包括基本功能测试、固定种子可重复性测试、文件格式验证、事件格式验证和错误处理测试。
+
+错误处理机制完善，对于文件创建失败和文件写入失败都进行了异常捕获，并输出详细的错误信息。时间复杂度为 $O(n)$，其中 $n$ 为总节拍数，空间复杂度也为 $O(n)$，需要存储所有事件行。由于使用 Python 标准库的 random 模块，随机数生成性能良好，整体性能表现优秀。
+
+\paragraph{简单示例}
+假设使用参数 \texttt{bpm=120}、\texttt{length\_seconds=60}、\texttt{seed=42} 生成谱面，可能得到如下输出。该谱面展示了单点事件和长条事件的混合分布，单点事件占主导地位，长条事件作为点缀。可以看到，单点事件的时间间隔在 2 到 6 个节拍之间随机变化，长条事件从时间 18 开始，包含 \texttt{hold\_start} 和三个连续的 \texttt{hold\_mid}，符合长条事件的连续性要求。双轨道同时触发的情况（如时间 12 处）增加了谱面的挑战性。
+
+\begin{verbatim}
+bpm=120
+(3,tap,0)
+(8,tap,1)
+(12,tap,0)
+(12,tap,1)
+(18,hold_start,0)
+(19,hold_mid,0)
+(20,hold_mid,0)
+(21,hold_mid,0)
+(25,tap,1)
+(30,tap,0)
+\end{verbatim}
+
+\paragraph{工作流程}
+生成流程如下：
+\begin{enumerate}
+    \item 从设置随机种子开始（如果提供），然后创建输出文件，如果文件创建失败则返回错误。
+    \item 文件创建成功后，计算总节拍数并初始化事件列表和节拍位置。
+    \item 进入主循环，循环条件为当前节拍位置小于总节拍数。
+    \item 在循环内部，首先生成事件间隔、事件类型随机数和轨道选择随机数。根据事件类型随机数判断生成单点事件还是长条事件。
+    \item 如果是单点事件，根据轨道选择生成相应的 \texttt{tap} 事件并添加到事件列表，然后更新节拍位置。
+    \item 如果是长条事件，首先生成长条长度和首尾额外事件标志，然后进入长条生成循环。在长条生成循环中，根据当前位置生成 \texttt{hold\_start}（开始位置）、\texttt{hold\_mid}（中间位置）或最后一个 \texttt{hold\_mid}（结束位置），并根据首尾标志决定是否添加额外的 \texttt{tap} 事件。长条生成完成后，更新节拍位置并返回主循环。
+    \item 主循环结束后，将所有事件写入文件，如果写入失败则返回错误，否则返回生成的文件路径。
+\end{enumerate}
+
+\subsubsection{ROM 生成函数 (process\_chart)}
+
+\paragraph{功能概述}
+ROM 生成函数实现了从谱面文件到 Verilog ROM 模块的完整转换功能，是连接软件谱面设计和硬件实现的关键桥梁。该函数读取经过校验的谱面文件，解析其中的事件信息，将其转换为 FPGA 可用的 ROM 数据格式，并自动生成标准的 Verilog ROM 模块代码。同时，会提取谱面文件中的 BPM 值，计算相应的时钟分频系数，并自动更新顶层 Verilog 模块的 BPM 参数，确保硬件时钟与谱面节拍同步。生成的 ROM 模块可以直接用于 FPGA 综合和实现，大大简化了从谱面设计到硬件部署的流程。
+
+\paragraph{实现思路}
+核心任务是将文本格式的谱面文件转换为硬件可用的 ROM 数据。谱面文件中的每个事件包含时间、类型和轨道三个信息，需要将这些信息编码为 4 位的 ROM 数据。编码规则如下：
 \begin{itemize}
-    \item \texttt{00}：无事件 (None)
-    \item \texttt{01}：点击 (Tap)
-    \item \texttt{10}：长按开始 (Hold Start)
-    \item \texttt{11}：长按保持 (Hold Mid)
+    \item 每个时间点的 ROM 数据为 4 位，低 2 位表示轨道 0 (\texttt{notedown}) 的事件类型，高 2 位表示轨道 1 (\texttt{noteup}) 的事件类型。
+    \item 事件类型的编码映射为：无事件编码为 00，\texttt{tap} 编码为 01，\texttt{hold\_start} 编码为 10，\texttt{hold\_mid} 编码为 11。
 \end{itemize}
-这种位域设计允许通过位掩码操作独立更新每个轨道的数据，实现了双轨事件的并行存储。
+这种编码方式使得同一时间点可以同时存在不同轨道的事件，通过位掩码操作可以独立更新每个轨道的数据。
 
-\paragraph{2. 自动 BPM 同步}
-硬件系统使用固定频率的时钟，需要根据曲目 BPM 动态调整分频系数。函数自动提取谱面 BPM，并计算分频阈值：
-\begin{equation}
-    div\_cnt = \frac{SystemFreq}{BPM} = \frac{375,000,000}{BPM}
-\end{equation}
-计算结果会通过正则表达式自动注入到顶层 Verilog 模块的参数定义中，实现了软硬件的无缝同步。
+BPM 到时钟分频的转换是该函数的另一个重要功能。FPGA 使用时钟分频来匹配 BPM，计算公式为：
+\[ div\_cnt = \frac{375,000,000}{bpm} \]
+其中 375,000,000 是系统时钟频率（假设为 375 MHz）。实现会提取谱面文件第一行的 BPM 值，计算相应的分频系数，然后使用正则表达式在顶层 Verilog 模块中查找并替换 \texttt{div\_cnt} 参数的值，实现 BPM 的自动同步。
 
-\paragraph{3. ROM 深度自适应}
-为了适配硬件地址解码，ROM 的深度必须调整为 2 的幂次（如 1024, 2048, 4096）。函数会扫描谱面最大时间戳 $T_{max}$，计算满足 $2^N > T_{max}$ 的最小 $N$ 值。考虑到硬件资源限制（地址位宽 12 位），最大深度限制为 4096。
+ROM 长度的计算需要考虑硬件实现的约束。ROM 长度必须是 2 的幂次，以便于地址解码，同时要能覆盖谱面中的最大时间值。实现会遍历所有事件找出最大时间值，然后计算大于等于该值的最小 2 的幂次作为 ROM 长度。由于硬件地址位宽限制为 12 位，ROM 长度最大为 4096，如果计算出的长度超过此限制，则返回错误。
 
-\paragraph{4. Verilog 代码生成}
-函数最终输出标准的 \texttt{ROM.v} 文件，包含模块声明与初始化块 (\texttt{initial begin ... end})。生成的代码示例如下：
+\paragraph{代码结构说明}
+核心函数是 \texttt{process\_chart(chart\_name)}，接受曲目名称作为参数，返回布尔值表示处理是否成功。
+
+函数首先解析谱面文件路径，检查文件是否存在，如果不存在则返回错误。然后调用 \texttt{chart\_check} 进行谱面校验，如果校验失败则直接返回。校验通过后，读取谱面文件内容，解析第一行获取 BPM 值，计算时钟分频系数，并使用正则表达式更新顶层 Verilog 模块的 \texttt{div\_cnt} 参数。
+
+接下来，函数使用正则表达式解析所有事件行，提取时间、类型和轨道信息，同时记录最大时间值。根据最大时间值计算 ROM 长度，检查是否超过限制。然后初始化 ROM 数组，数组长度为计算出的 ROM 长度，所有元素初始化为 0。遍历所有事件，根据事件类型获取编码值，根据轨道选择更新 ROM 数组的相应位置。
+\begin{itemize}
+    \item 对于轨道 1 的事件，使用位掩码操作更新高 2 位，保留低 2 位；
+    \item 对于轨道 0 的事件，更新低 2 位，保留高 2 位。
+\end{itemize}
+这种设计确保了不同轨道的事件可以共存于同一时间点。
+
+ROM 数据填充完成后，函数生成 Verilog 代码。代码包括模块声明、ROM 数组声明、初始化块和组合逻辑块。初始化块中包含所有 ROM 位置的初始化语句，使用二进制格式表示。组合逻辑块中将 ROM 数据按位域分解为 \texttt{noteup} 和 \texttt{notedown} 两个输出。生成的代码写入 \texttt{verilog/ROM.v} 文件，如果写入失败则返回错误。
+
+\paragraph{简单示例}
+输入谱面文件包含 BPM 声明和多个事件，每个事件包含时间、类型和轨道信息。函数首先提取 BPM 值 120，计算分频系数为 3,125,000，并更新顶层模块的 \texttt{div\_cnt} 参数。然后解析事件，找出最大时间值为 15，计算 ROM 长度为 16（2 的 4 次方）。
+
+ROM 数据填充过程如下：
+\begin{itemize}
+    \item 时间 0 的轨道 0 事件 \texttt{tap} 编码为 01，写入 ROM[0] 的低 2 位；
+    \item 时间 5 的轨道 1 事件 \texttt{tap} 编码为 01，写入 ROM[5] 的高 2 位；
+    \item 时间 10 的轨道 0 事件 \texttt{hold\_start} 编码为 10，写入 ROM[10] 的低 2 位；
+    \item 后续的 \texttt{hold\_mid} 事件编码为 11，写入相应位置的低 2 位。
+\end{itemize}
+
+输入谱面示例：
+\begin{verbatim}
+bpm=120
+(0,tap,0)
+(5,tap,1)
+(10,hold_start,0)
+(11,hold_mid,0)
+(12,hold_mid,0)
+(15,tap,1)
+\end{verbatim}
+
+生成的 Verilog ROM 模块包含模块声明、ROM 数组声明和初始化数据。ROM 数组大小为 16，每个位置存储 4 位数据。初始化块中为每个 ROM 位置赋值，使用 4 位二进制格式。组合逻辑块中将 ROM 数据按位域分解，低 2 位输出为 \texttt{notedown}，高 2 位输出为 \texttt{noteup}。硬件可以通过地址输入访问 ROM，获取对应时间点的事件信息。
 
 \begin{verbatim}
 module ROM (
@@ -347,19 +443,38 @@ module ROM (
     output reg [1:0] noteup,
     output reg [1:0] notedown
 );
-    reg [3:0] ROM [0:15];
-    initial begin
-        ROM[0] = 4'b0001; // Time 0: Track 0 Tap
-        ROM[5] = 4'b0100; // Time 5: Track 1 Tap
-        // ...
-    end
-    always @(*) begin
-        {noteup, notedown} = ROM[addr];
-    end
+reg [3:0] ROM [0:15];
+initial begin
+    ROM[0] = 4'b0001;
+    ROM[5] = 4'b0100;
+    ROM[10] = 4'b0010;
+    ROM[11] = 4'b0011;
+    ROM[12] = 4'b0011;
+    ROM[15] = 4'b0100;
+end
+always @(*) begin
+    {noteup, notedown} = ROM[addr];
+end
 endmodule
 \end{verbatim}
 
-\subsection{music\_sync模块说明}
+\paragraph{简要流程}
+处理流程如下：
+\begin{enumerate}
+    \item 从解析谱面文件路径开始，检查文件是否存在，如果不存在则返回错误。
+    \item 文件存在后调用 \texttt{chart\_check} 函数进行校验，如果校验失败则返回错误。
+    \item 校验通过后读取谱面文件内容，解析第一行获取 BPM 值，如果 BPM 格式不正确则返回错误。
+    \item BPM 格式正确后，计算时钟分频系数，使用正则表达式更新顶层 Verilog 模块的 \texttt{div\_cnt} 参数，如果更新失败则返回错误。
+    \item 接下来解析所有事件行，提取时间、类型和轨道信息，同时记录最大时间值。
+    \item 根据最大时间值计算 ROM 长度，如果超过 4096 的限制则返回错误。ROM 长度确定后，初始化 ROM 数组，所有元素设为 0。
+    \item 遍历所有事件，根据事件类型获取编码值，根据轨道选择使用位掩码操作更新 ROM 数组的相应位置。对于轨道 1 的事件，更新高 2 位；对于轨道 0 的事件，更新低 2 位。
+    \item 所有事件处理完成后，生成 Verilog 代码。代码生成过程包括：添加模块声明和接口定义，添加 ROM 数组声明，添加初始化块并为每个 ROM 位置生成初始化语句，添加组合逻辑块实现数据输出。
+    \item 生成的代码写入 \texttt{verilog/ROM.v} 文件，如果写入失败则返回错误，否则返回处理成功。
+\end{enumerate}
+
+整个流程确保了从谱面文件到硬件 ROM 模块的完整转换，同时实现了 BPM 参数的自动同步。
+
+\subsection{音乐播放模块(music\_sync)}
 
 \subsubsection{监听键盘及音乐播放}
 
@@ -378,7 +493,7 @@ endmodule
     \item MuseDash-main 目录下调用调试命令：\texttt{python music\_sync/player.py songName}
 \end{itemize}
 
-\subsection{软硬件协同方案}
+\subsubsection{软硬件协同方案探索}
 
 \begin{itemize}
     \item \textbf{方案一：PC 键盘 $\rightarrow$ 软件捕获 $\rightarrow$ 串口（UART）$\rightarrow$ FPGA}
@@ -412,88 +527,236 @@ endmodule
 
 综合系统可靠性、实现难度与开发周期等因素，对于当前 MuseDash 系统而言，最适合采用“PC 键盘 $\rightarrow$ 上位机软件 $\rightarrow$ UART 串口 $\rightarrow$ FPGA”这一协同架构。该架构既可以满足基本的播放启动与节拍同步需求，也便于在后续阶段引入时间戳校准机制或硬件脉冲触发机制进行性能优化。通过在 FPGA 端加入简单的串口命令解析逻辑并与现有 Address Generator、Judgement FSM 和 Score Accumulator 模块联动，可以在不大幅增加系统复杂度的前提下，实现稳定可靠的软硬件协同控制效果。
 
+\section{硬件设计 (Hardware Design)}
+
+\subsection{顶层模块 (Top Module)}
+顶层模块 (\texttt{MuseDash.v}) 是整个硬件系统的核心模块，其主要职责是把各个子模块实例化并连接起来，让它们能够协同工作。顶层模块还负责接收来自开发板的复位信号（包括低电平有效的全局复位 \texttt{rst\_n} 和游戏重置信号 \texttt{restart}），并将这些控制信号同步分发至所有子模块。
+
+此外，顶层模块还承担了信号处理任务：因为不同模块间传输的音符和分数数据位宽不同，我们需要在顶层对这些信号线进行切片与拼接，确保数据能准确地流向该去的地方。这种设计让复杂的连线逻辑都集中在顶层，子模块只需要专注于自己的功能，不仅让整个系统结构看起来更有条理，我们在 Quartus 里看 RTL 视图或者调试波形的时候，也能更容易看懂信号的走向。
 
 
-\section{硬件设计}
+% [Figure 6: Top Module]
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=1.0\textwidth]{figures/figure6_top_module.png} 
+%     \caption{顶层模块架构图}
+%     \label{fig:top_module}
+% \end{figure}
 
-\paragraph{显示与输入}
-\begin{itemize}
-    \item \textbf{音符类型}：`O` 代表 TAP（点击），`<` 代表 HOLD\_START（长按开始），`=` 代表 HOLD\_MIDDLE（长按保持）。
-    \item \textbf{按键映射}：左起第一个按钮控制上轨道，第二个控制下轨道；右起第一个按钮为重启 (restart)，右起第一个开关为复位 (\texttt{rst\_n})。
-    \item \textbf{反馈}：七段数码管显示判定结果（PERFECT, GOOD, MISS/FL）和实时累计分数。
-\end{itemize}
+\subsection{分布式架构设计 (Distributed Architecture)}
+为了降低调试难度并提高团队协作效率，我们采用了分布式架构设计。整个设计被细分为 14 个轻量级模块，每个模块专注于单一功能。如图 \ref{fig:verilog_catalog} 所示，系统包含负责生成可变频率时钟的 \texttt{Clk\_Div} 模块、负责按键消抖的 \texttt{Debouncer} 模块、以及用于随机数生成的 \texttt{LFSR} 模块。在显示方面，\texttt{CurrentJudge7Seg} 和 \texttt{TotalScore7Seg} 分别处理判定结果和总分的数码管显示，而 \texttt{TextLCD} 则驱动液晶屏显示滚动的谱面。核心数据流由 \texttt{Address\_Generator} 驱动 ROM 读取，经由 \texttt{Queue} 模块处理后进入 \texttt{Judgement} 模块进行判定。这种分布式的设计使得每个模块都相对独立且易于验证，在最终测试阶段，我们只需重点关注核心的判定逻辑，极大地缩短了开发周期。
 
-\subsection{顶层模块}
-顶层模块负责连接各个子模块并执行基本逻辑运算（如复位信号整合）。它协调各模块（如时钟分频、地址生成、队列、判定、显示等）协同工作，简化了整体架构。
+% [Figure 7: Verilog File Catalog]
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=0.4\textwidth]{figures/figure7_file_catalog.png} 
+%     \caption{Verilog 模块文件目录}
+%     \label{fig:verilog_catalog}
+% \end{figure}
 
-\subsection{分布式架构 (Distributed Architecture)}
-为了便于调试和分工，我们将设计划分为 14 个子模块，包括：
+\subsection{可调节时钟分频器 (Adjustable Clock Divider)}
+\texttt{Clk\_Div} 模块旨在根据输入的 50MHz 系统时钟 (\texttt{clk}) 生成一个分频后的低频时钟信号 (\texttt{clk\_div})。该模块引入了一个关键参数 \texttt{div\_cnt}（分频系数）。默认情况下，该参数使得输出时钟周期为 100 毫秒（10Hz）。模块内部维护一个计数器，每当计数器达到 \texttt{div\_cnt} 定义的阈值时，翻转输出电平并重置计数器。
 
-\begin{description}
-    \item[Clk\_Div] 生成可变频率时钟。
-    \item[LFSR] 随机数生成（用于测试）。
-    \item[Debouncer] 按键消抖。
-    \item[Queue] 数据队列处理。
-    \item[Judgement] 核心判定逻辑。
-    \item[TextLCD \& 7Seg] 显示模块。
-    \item[Score \& Accumulator] 分数转换与累加。
-\end{description}
+该模块最显著的特性是其参数的可调节性。我们将 \texttt{div\_cnt} 参数暴露给顶层模块，使得软件端的 C++ 程序可以根据乐曲的 BPM（每分钟节拍数）动态计算出精确的分频值，并在生成 ROM 时自动更新顶层模块的参数。这一设计实现了软硬件的深度同步，确保游戏速度严格匹配音乐节奏。
 
-\subsection{层次化设计}
-主要体现在加法器和累加器的设计上：
-\begin{itemize}
-    \item \textbf{结构}：1位 BCD 加法器 $\rightarrow$ 4位 BCD 加法器 $\rightarrow$ 16位累加器。
-    \item \textbf{预加法 (Pre-Addition)}：在 \texttt{ScoreConversion} 模块中先将上下轨道的分数相加，再传入累加器，减少了累加器的端口复杂度。
-\end{itemize}
+% [Figure 9: Top Module Parameter div_cnt]
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=0.8\textwidth]{figures/figure9_parameter_code.png} 
+%     \caption{顶层模块中的 div\_cnt 参数定义}
+%     \label{fig:div_cnt_param}
+% \end{figure}
 
-\subsection{可调节时钟分频器}
-\texttt{clk\_div} 模块通过参数 \texttt{div\_cnt} 将 50MHz 输入时钟分频为低频信号（如 10Hz/100ms）。该参数在顶层模块中根据 BPM 动态计算，使得 C++ 程序可以轻松改变游戏速度。
+\subsection{按键消抖 (Debouncement)}
+\texttt{Debouncer} 模块用于消除机械按键在闭合或断开瞬间产生的抖动噪声，确保输出信号 (\texttt{click\_out}) 的稳定性。其工作原理基于计数器监测：当检测到输入信号变化且模块未处于计数状态时，启动一个约 20ms 的倒计时。在此期间，任何输入变化都会被忽略。只有当计数器归零且输入信号依然稳定时，输出信号才会更新。虽然这一机制引入了微小的延迟，但这对于滤除瞬态毛刺、保证 \texttt{Judgement} 模块接收到干净的脉冲信号至关重要。
 
-\subsection{消抖}
-利用计数器和状态标志来过滤机械按键的抖动。只有当输入信号稳定一段时间（计数器归零）后，输出信号才会更新。这确保了输入信号的准确性。
+% [Figure 10: Ports of Debouncer]
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=0.4\textwidth]{figures/figure10_debouncer_ports.png} 
+%     \caption{消抖模块接口定义}
+%     \label{fig:debouncer_ports}
+% \end{figure}
 
-\subsection{随机数生成}
-使用 13位 LFSR（线性反馈移位寄存器）生成伪随机序列。主要用于在代码未完成时的随机输入测试。
+\subsection{随机数生成 (Random Generation)}
+为了在代码未完全完成时进行随机输入测试，我们利用线性反馈移位寄存器 (LFSR) 实现了伪随机序列生成 (PRBS)。该电路由 $n$ 个触发器和若干异或门组成。在每个时钟周期，新的输入值通过对寄存器特定位的异或运算反馈生成。我们采用 13 位 LFSR，根据特定的反馈多项式（见图 \ref{fig:lfsr_poly}），能够产生最大重复间隔为 $2^{13}-1$ 的伪随机序列。该模块为验证队列移位和判定逻辑的鲁棒性提供了自动化的测试激励。
 
-\subsection{TextLCD 显示}
+% [Figure 11: LFSR Polynomial Table]
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=0.6\textwidth]{figures/figure11_lfsr_table.png} 
+%     \caption{LFSR 多项式表}
+%     \label{fig:lfsr_poly}
+% \end{figure}
 
-\subsubsection{队列设计}
-接收 ROM 数据并在 \texttt{clk\_div} 驱动下进行移位，模拟音符滚动效果。最左侧数据用于判定和显示。
+% [Figure 12: LFSR Algorithm Verilog Code]
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=0.5\textwidth]{figures/figure12_lfsr_code.png} 
+%     \caption{LFSR 算法 Verilog 实现}
+%     \label{fig:lfsr_code}
+% \end{figure}
 
-\subsubsection{Text LCD 设计}
-基于 HD44780 控制器。状态机循环执行：空闲 $\rightarrow$ 清屏 $\rightarrow$ 设置模式 $\rightarrow$ 设置 DDRAM 地址 $\rightarrow$ 写入数据。将音符映射为 ASCII 码写入 DDRAM。
+\subsection{TextLCD 显示系统}
 
-\subsubsection{双频率设计}
-引入了 \texttt{clk\_buf}（屏幕帧率）独立于 \texttt{clk\_div}（游戏逻辑/BPM）。这解决了帧率过低导致显示闪烁或上下轨道不同步的问题。
+\subsubsection{队列设计 (Queue Design)}
+\texttt{Queue} 模块充当数据缓冲区。由于 TextLCD 显示需要一定宽度的音符数据流，该模块将来自 ROM 的串行数据存入移位寄存器阵列。模块接收分频时钟 \texttt{clk\_div}，每当时钟周期到来时，内部数据逐位右移，最低位被新的输入数据替换。队列最左侧的数据被作为“当前判定位”，同时送往显示模块和判定模块。
 
-\subsection{七段数码管显示}
-由于 DE2-115 板载数码管是独立控制的，不需要多路复用。我们设计了纯组合逻辑电路来显示数字（0-9）和字符（PF, GO, FL）。
+% [Figure 13: Queue Design]
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=0.8\textwidth]{figures/figure13_queue_design.png} 
+%     \caption{队列模块设计原理}
+%     \label{fig:queue_design}
+% \end{figure}
 
-\subsection{判定}
-这是最核心的模块，负责接收音符、检测按键并输出结果。
+\subsubsection{LCD 控制逻辑}
+\texttt{TextLCD} 模块负责生成驱动 LCD1602 所需的控制信号（如 RS, RW, EN）。由于 HD44780 控制器需要严格的初始化序列，我们设计了一个循环状态机来管理显示流程：空闲 $\rightarrow$ 清屏 $\rightarrow$ 设置显示模式 $\rightarrow$ 设置 DDRAM 地址 $\rightarrow$ 写入数据。模块将队列中的音符编码（0/1/2/3）映射为 ASCII 字符（空格、O、<、=），并通过设置 DDRAM 地址将字符写入屏幕的对应位置。
+
+% [Figure 14: DDRAM write address specification]
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=0.7\textwidth]{figures/figure14_ddram_address.png} 
+%     \caption{HD44780 DDRAM 地址映射表}
+%     \label{fig:ddram_spec}
+% \end{figure}
+
+\subsubsection{双频率设计 (Dual Frequency)}
+在 TextLCD 模块中，我们引入了独立的缓冲时钟 \texttt{clk\_buf}。这是因为游戏逻辑时钟 \texttt{clk\_div} 的频率由音乐 BPM 决定，通常较低；直接用其驱动屏幕刷新会导致严重的闪烁和上下轨道显示不同步。通过引入较高频率的 \texttt{clk\_buf} 专门负责 LCD 的指令写入与刷新，我们确保了即使在慢速歌曲中，屏幕显示依然流畅稳定。
+
+\subsection{七段数码管显示 (7-Segment Display)}
+DE2-115 开发板上的七段数码管由独立引脚控制，不需要复杂的多路复用（Multiplexing）扫描电路。因此，我们采用了简化的设计：直接使用组合逻辑电路将输入的 BCD 码或状态码译码为 7 段电平信号。模块 \texttt{TotalScore7Seg} 负责将累加器的数值转换为数字字形（0-9），而 \texttt{CurrentJudge7Seg} 则将判定结果映射为字符字形（PF, GO, FL），实现了零延迟的视觉反馈。
+
+% [Figure 15: 7-Seg Principle]
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=0.4\textwidth]{figures/figure15_7seg_principle.png} 
+%     \caption{七段数码管显示原理}
+%     \label{fig:7seg_principle}
+% \end{figure}
+
+\subsection{判定逻辑 (Judgement)}
+\texttt{Judgement} 模块是系统的核心，负责根据当前音符 (\texttt{cur\_note}) 和按键输入做出评分。为了简化代码，我们定义了相关的宏来表示判定结果（PERFECT, GOOD, MISS）和音符类型。
+
+% [Figure 16: Macro Definitions]
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=0.4\textwidth]{figures/figure16_macro_definitions.png} 
+%     \caption{判定逻辑宏定义}
+%     \label{fig:macro_def}
+% \end{figure}
 
 \subsubsection{硬件判定标准}
-\begin{itemize}
-    \item \textbf{TAP/HOLD\_START}：在判定窗口内，若按键上升沿落在窗口中间 $\pm 1/2$ 区域为 \textbf{PERFECT}，否则为 \textbf{GOOD}。超出窗口为 \textbf{MISS}。
-    \item \textbf{HOLD\_MIDDLE}：必须在前半个判定周期内保持按住。如果松开过早则为 MISS。
-\end{itemize}
+对于 TAP 和 HOLD\_START 音符，我们采用时间窗口判定法。判定窗口定义为两个 \texttt{clk\_div} 周期。若按键上升沿落在窗口中间 $\pm 1/2$ 区域内，判定为 PERFECT；若在窗口边缘，判定为 GOOD；若超出窗口未操作，判定为 MISS。对于 HOLD\_MIDDLE 音符，由于没有设计 HOLD\_END 事件，我们规定只需在前半个周期内保持按住即可判定为 PERFECT，后半周期不进行检测（Don't Care）。这一设计结合了 \texttt{count2} 计数器来实现高精度的区间检测。
 
-\subsubsection{信号判定}
-引入 \texttt{judged} 信号标志当前音符是否已完成判定，防止重复计分。
-\textbf{逻辑}：检测到有效按键或超时未按，信号置 1；判定周期结束或无音符时，信号置 0。
+% [Figure 17: TAP and HOLD_START Judgement Criteria]
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=0.5\textwidth]{figures/figure17_tap_criteria.png} 
+%     \caption{TAP 与 HOLD\_START 判定时序图}
+%     \label{fig:tap_criteria}
+% \end{figure}
 
-\subsubsection{FSM 设计}
-状态机包含 \textbf{NO\_NOTE, GOOD, PERFECT, MISS} 四个状态。
-\textbf{特殊机制}：为了解决组合逻辑传播延迟问题，我们强制 FSM 在音符判定中间的 \texttt{clk\_div} 上升沿短暂返回 NO\_NOTE 状态。
+% [Figure 18: HOLD_MIDDLE Judgement Criteria]
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=0.5\textwidth]{figures/figure18_hold_criteria.png} 
+%     \caption{HOLD\_MIDDLE 判定时序图}
+%     \label{fig:hold_criteria}
+% \end{figure}
 
-\subsubsection{Vivado 仿真}
-在上板前进行了详细的行为级仿真，验证了不同音符和按键时机的判定逻辑。
+\subsubsection{判定信号锁定 (Signal Judged)}
+为了防止对同一个音符进行重复计分，我们引入了 \texttt{judged} 信号。该信号独立于状态机运行，其逻辑如下：当检测到有效判定（如 TAP 被击中）或时间窗口结束时，\texttt{judged} 信号置 1；当进入新的音符周期（即 \texttt{clk\_div} 上升沿且 \texttt{count2} 下降沿）时，信号复位为 0。这种分离设计允许状态机专注于状态流转，而 \texttt{judged} 信号负责锁存结果。
 
-\subsection{分数累加}
-\begin{itemize}
-    \item \textbf{BCD 加法器}：采用级联的 1位 BCD 加法器构建 4位加法器。当和大于 9 或有进位时，进行 +6 修正。
-    \item \textbf{预加法}：在分数转换模块先计算 \texttt{score\_up + score\_down}，然后再输入累加器，避免了设计复杂的三输入加法器。
-\end{itemize}
+% [Figure 19: Verilog Code of Signal Judged]
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=0.9\textwidth]{figures/figure19_signal_judged_code.png} 
+%     \caption{Judged 信号逻辑代码}
+%     \label{fig:judged_code}
+% \end{figure}
+
+\subsubsection{有限状态机设计 (FSM Design)}
+我们在最终设计中采用了单一 FSM 架构，包含四个主状态：\textbf{NO\_NOTE, GOOD, PERFECT, MISS}。状态机在 \texttt{clk} 时钟下运行，根据当前音符类型和按键输入实时更新状态。
+
+默认情况下 FSM 处于 \textbf{NO\_NOTE} 状态。当检测到 TAP 或 HOLD\_START 音符时，FSM 预先进入 \textbf{GOOD} 状态以监听按键输入。若按键在窗口中心被按下，跳转至 \textbf{PERFECT}，否则保持或跳转至 \textbf{MISS}。
+
+在调试过程中，我们发现了一个被称为“信号穿透” (Signal Penetration) 的问题：\texttt{cur\_note} 信号在时钟切换时会产生毛刺，导致 HOLD\_MIDDLE 信号“穿透”到前一个周期造成误判。为了解决这个问题，我们在 FSM 中加入了一个强制跳转规则：在每个音符周期的中间点（即 \texttt{clk\_div} 上升沿），强制状态机短暂跳转回 \textbf{NO\_NOTE}。这一操作相当于一次“软复位”，有效切断了错误信号的传播路径，确保了逻辑的正确性。
+
+% [Figure 20: FSM State Transition Diagram]
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=0.7\textwidth]{figures/figure20_fsm_diagram.png} 
+%     \caption{最终 FSM 状态转移图}
+%     \label{fig:fsm_diagram}
+% \end{figure}
+
+% [Figure 29: Addressing Signal Penetration]
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=0.8\textwidth]{figures/figure29_signal_penetration_fix.png} 
+%     \caption{信号穿透问题的代码修正}
+%     \label{fig:penetration_fix}
+% \end{figure}
+
+\subsubsection{Vivado 行为级仿真}
+鉴于判定逻辑的复杂性，我们在上板前进行了详尽的 Vivado 行为级仿真。仿真波形验证了五种关键场景：无操作导致的 MISS、精准点击导致的 PERFECT、长按时间不足导致的 MISS 等。仿真结果证明了逻辑设计的完备性。
+
+% [Figure 21: Vivado Simulation of Judgement Module]
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=1.0\textwidth]{figures/figure21_vivado_simulation.png} 
+%     \caption{Judgement 模块的 Vivado 仿真波形}
+%     \label{fig:vivado_sim}
+% \end{figure}
+
+\subsection{分数累加 (Score Accumulation)}
+
+分数累加模块负责游戏得分的实时计算与存储。为了解决 BCD（二-十进制）码运算的复杂性并确保系统的可维护性，我们在该模块中采用了**层次化设计 (Hierarchical Design)** 的策略，通过自底向上的方式构建运算单元。
+
+\subsubsection{核心逻辑与层次化构建}
+遵循层次化设计的思想，我们首先设计了最底层的基本单元——\textbf{1 位 BCD 加法器} (\texttt{bcd\_adder})。
+该模块遵循标准的 BCD 加法修正规则：当两个 BCD 码相加的和超过 9 (1001) 或产生进位时，必须加 6 (0110) 进行修正。
+
+基于这个基础单元，我们向上构建了更高层级的逻辑：
+\begin{enumerate}
+    \item \textbf{级联扩展}：将 4 个 1 位 BCD 加法器级联，构建出支持 0-9999 范围的 \textbf{4 位 BCD 加法器}。
+    \item \textbf{模块封装}：最终将加法器封装进 \texttt{Accumulator} 模块，配合时序逻辑实现分数的持续累积。
+\end{enumerate}
+
+这种设计不仅将复杂的 16 位运算分解为可管理的子任务，还隔离了不同层级的逻辑。当计分规则发生变化时，只需修改底层模块而无需重构整个系统。
+
+% [Figure 23: BCD Adder Verilog Code]
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=0.5\textwidth]{figures/figure23_bcd_adder_code.png} 
+%     \caption{BCD 加法器 Verilog 代码}
+%     \label{fig:bcd_adder_code}
+% \end{figure}
+
+% [Figure 8: Score Accumulator Schematic]
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=1.0\textwidth]{figures/figure8_accumulator_schematic.png} 
+%     \caption{分数累加器原理图 (体现层次化结构)}
+%     \label{fig:accumulator_schematic}
+% \end{figure}
+
+\subsubsection{预加法优化 (Pre-Addition)}
+为了进一步优化累加器的端口设计，我们引入了 \texttt{ScoreConversion} 模块进行“预加法”处理。
+该模块在数据进入累加器之前，先将上轨道 (\texttt{score\_up}) 和下轨道 (\texttt{score\_down}) 的分数进行求和。
+\begin{equation}
+    score = score\_up + score\_down
+\end{equation}
+这种设计避免了在累加器内部设计复杂的三输入加法器，降低了单层逻辑的复杂度，同时也使得修改计分规则更加灵活。
+
+% [Figure 24: Pre-Addition]
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=0.6\textwidth]{figures/figure24_pre_addition.png} 
+%     \caption{预加法逻辑代码}
+%     \label{fig:pre_addition}
+% \end{figure}
 
 \section{讨论}
 
