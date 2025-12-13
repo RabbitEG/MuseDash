@@ -1,0 +1,63 @@
+@startuml top
+title 总体关系：Web 前后端 -> Quartus -> FPGA
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam dpi 180
+skinparam defaultFontName "Microsoft YaHei"
+skinparam defaultFontSize 26
+skinparam TitleFontSize 38
+skinparam TitleFontStyle bold
+skinparam roundcorner 12
+skinparam padding 6
+skinparam ArrowThickness 2.5
+skinparam packageStyle rectangle
+skinparam componentStyle rectangle
+skinparam nodesep 22
+skinparam ranksep 22
+left to right direction
+actor "用户\n(开发者/玩家)" as USER
+node "PC / 浏览器" as PC {
+  component "前端 (Web)\nfrontend/index.html\nfrontend/app.js" as FE #FFF8E1
+}
+package "后端 (Python)\nserver.py (HTTP + helpers)" as BE #E3F2FD {
+  component "SVR\n(server.py)\nPOST /chart_engine/process\nPOST /chart_engine/generate_random\nPOST /chart_analysis/run\nPOST /music_sync/play|stop\nPOST /quartus/open" as SVR #E3F2FD
+  component "CHART_ENGINE\nchart_engine/chart_engine.py\n(生成 verilog/ROM.v\n+ 需要时更新 BPM)" as ENGINE #F3E5F5
+  component "CHART_ANALYSIS\nchart_analysis/chart_analysis.py\n(输出 *.png / *.json)" as ANALYSIS #E8F5E9
+  component "MUSIC_SYNC\nmusic_sync/player.py\n(PC 侧音频/节拍)" as MUSIC #E0F7FA
+}
+database "项目文件系统 (Workspace)\n- charts/<name>/<name>.txt (+.mp3)\n- chart_analysis/outputs/*\n- verilog/*.v + verilog/ROM.v\n- quartus/MuseDash.qpf/.qsf" as FS #F5F7FF
+node "Quartus Prime" as QUARTUS #FAFAFF {
+  component "编译/综合/布局布线/时序分析" as BUILD #FAFAFF
+  artifact "quartus/output_files/\nMuseDash.sof" as SOF
+}
+node "DE2-115 FPGA\n(Cyclone IV E)" as FPGA #FFFDF4 {
+  component "MuseDash (Top)\nAddress_Generator\nQueue\nJudgement (FSM)\nAccumulator (BCD)\nTextLCD\n7-Seg Drivers" as HW #FFFDF4
+  rectangle "按键\n(clickup/clickdown/restart)" as BTN #FFFDF4
+  rectangle "TextLCD 1602" as LCD #FFFDF4
+  rectangle "7-Seg" as SEG #FFFDF4
+}
+USER -[hidden]right-> PC
+PC -[hidden]right-> BE
+USER -right-> FE : 打开 UI\n(选择模式/曲目)
+BE -[hidden]down-> FS
+FS -[hidden]down-> QUARTUS
+QUARTUS -[hidden]down-> FPGA
+FE --> SVR : HTTP 请求\n(调用接口)
+SVR --> ANALYSIS : 运行分析
+ANALYSIS -down-> FS : 写入 outputs/*\n(图表 + summary)
+FS -up-> FE : UI 预览\n(outputs/*)
+SVR --> ENGINE : 处理/生成谱面
+ENGINE -down-> FS : 写入 verilog/ROM.v
+SVR -down-> FS : 打开 quartus 工程文件\n(辅助按钮)
+USER -down-> QUARTUS : 编译 / 下载
+FS -down-> BUILD : 工程文件 + HDL
+BUILD --> SOF : 生成 .sof
+SOF -down-> FPGA : 下载到 FPGA
+BTN --> HW : 输入
+HW --> LCD : 谱面滚动显示
+HW --> SEG : 分数 + 判定
+note bottom of FS
+ROM.v 会作为可综合的“常量 ROM”：
+chart_engine 生成的谱面数据会被 FPGA 在运行时逐拍读取。
+end note
+@enduml
