@@ -1,0 +1,58 @@
+@startuml frontend_normal
+title Frontend <-> Backend (Normal Mode)
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam dpi 180
+skinparam defaultFontName "Microsoft YaHei"
+skinparam defaultFontSize 30
+skinparam TitleFontSize 42
+skinparam TitleFontStyle bold
+skinparam roundcorner 12
+skinparam padding 6
+skinparam maxMessageSize 600
+skinparam ParticipantPadding 12
+skinparam BoxPadding 6
+skinparam NotePadding 6
+skinparam sequenceMessageSpacing 8
+skinparam sequence {
+  ArrowThickness 2.5
+  LifeLineThickness 1
+  ParticipantBorderThickness 1
+  ParticipantBackgroundColor #F7F7FB
+  ParticipantBorderColor #B8B8CC
+  BoxBorderColor #C8C8D8
+  BoxBackgroundColor #FAFAFF
+}
+hide footbox
+autonumber
+
+box "Frontend (Web)" #FFFDF4
+  participant UI as "UI" #FFF8E1
+end box
+
+box "Backend (Python)" #F3F6FF
+  participant SVR as "SVR\n(server.py)" #E3F2FD
+  participant ANALYSIS as "ANALYSIS\n(chart_analysis/\n chart_analysis.py)" #E8F5E9
+  participant ENGINE as "ENGINE\n(chart_engine/\n chart_engine.py)" #F3E5F5
+  participant PLAYER as "PLAYER\n(music_sync/\n player.py)" #E0F7FA
+end box
+
+database FS as "/outputs/\n(*.json+\n *.png)" #F5F7FF
+
+UI -> SVR: **POST** /chart_analysis/run
+SVR -> ANALYSIS: **RUN** analysis
+ANALYSIS -[#2E7D32]> FS: **WRITE** /outputs/*
+SVR -[#1565C0]>> UI: **RETURN** 200
+
+UI -> SVR: **GET** /outputs/*
+SVR -> FS: **READ** /outputs/*
+SVR -[#1565C0]>> UI: **RETURN** /outputs/*
+
+UI -> SVR: **POST** /chart_engine/process
+SVR -> ENGINE: **PROCESS** chart
+ENGINE -[#6A1B9A]>> UI: **GENERATE** /verilog/ROM.v
+
+UI -> SVR: **POST** /music_sync/play
+SVR -> PLAYER: **START** playback
+@enduml

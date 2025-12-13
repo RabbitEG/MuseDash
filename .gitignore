@@ -31,6 +31,9 @@ stp1_auto_signaltap_0.txt
 
 .DS_Store
 
+# Local tooling output
+.tools/
+
 # Chart analysis generated assets
 chart_analysis/outputs/
 
