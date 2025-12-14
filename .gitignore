@@ -42,3 +42,6 @@ charts/Random/Random.txt
 
 # Video
 *.mp4
+
+# PPTX files
+*.pptx
