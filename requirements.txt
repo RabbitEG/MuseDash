@@ -1,0 +1,5 @@
+# Unified dependencies for Python utilities (chart_analysis, music_sync)
+keyboard
+matplotlib>=3.5.0
+numpy>=1.21.0
+pygame

@@ -1,0 +1,47 @@
+# Quartus db directories
+quartus/db/
+quartus/incremental_db/
+quartus/output_files/
+quartus/simulation/
+
+# Temporary files
+*.qws
+*.smsg
+*.rpt
+*.jdi
+*.csv
+__pycache__/
+*.pyc
+
+# Build artifacts
+*.sof
+*.pof
+*.jam
+*.hex
+*.bin
+
+# SignalTap
+*.stp
+*_autosig.*
+stp1_auto_signaltap_0.txt
+
+# Project auto files
+*.qpf
+*.qdf
+
+.DS_Store
+
+# Local tooling output
+.tools/
+
+# Chart analysis generated assets
+chart_analysis/outputs/
+
+# Generated random chart
+charts/Random/Random.txt
+
+# Video
+*.mp4
+
+# PPTX files
+*.pptx

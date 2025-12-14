@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Muse Dash On FPGA</title>
+  <link rel="icon" href="assets/favicon.ico" />
+  <style>
+    :root {
+      --accent: #ff6b9b;
+      --accent-2: #5ac8fa;
+      --panel-bg: rgba(13, 16, 26, 0.75);
+      --text-main: #f4f6fb;
+      --text-sub: #c8cede;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body {
+      font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: var(--text-main);
+      background: #0b0d12;
+    }
+    .main {
+      position: relative;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    .bg {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(135deg, rgba(8,10,18,0.65) 0%, rgba(8,10,18,0.2) 100%),
+        url("assets/bg.png") center/cover no-repeat;
+      filter: brightness(0.7);
+      z-index: -2;
+    }
+    .scrim {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 20% 20%, rgba(255,107,155,0.25), transparent 35%),
+                  radial-gradient(circle at 80% 60%, rgba(90,200,250,0.25), transparent 30%);
+      z-index: -1;
+    }
+    .content {
+      position: relative;
+      min-height: 100vh;
+      padding: 48px 36px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .content-inner {
+      width: 100%;
+      max-width: 960px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .start-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      backdrop-filter: blur(2px);
+      background: rgba(8, 10, 18, 0.45);
+      cursor: pointer;
+      transition: opacity 0.3s ease;
+      z-index: 10;
+    }
+    .start-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .start-title {
+      font-size: 60px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      text-shadow: 0 8px 30px rgba(255,107,155,0.35), 0 3px 10px rgba(0,0,0,0.4);
+    }
+    .start-sub {
+      margin-top: 120px;
+      font-size: 16px;
+      color: var(--text-sub);
+    }
+    .mode-chooser {
+      display: flex;
+      flex-direction: row;
+      gap: 32px;
+      align-items: center;
+      justify-content: center;
+      min-height: 70vh;
+      flex-wrap: wrap;
+    }
+    .mode-chooser.hidden { display: none; }
+    .big-btn {
+      width: min(520px, 90vw);
+      padding: 50px 36px;
+      font-size: 26px;
+      font-weight: 800;
+      border-radius: 16px;
+      border: none;
+      cursor: pointer;
+      color: #0b0d12;
+      background: linear-gradient(135deg, #ff6b9b, #ff8fb5);
+      box-shadow: 0 18px 48px rgba(255,107,155,0.38);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .big-btn.secondary {
+      background: linear-gradient(135deg, #5ac8fa, #7ad9ff);
+      box-shadow: 0 18px 48px rgba(90,200,250,0.32);
+    }
+    .big-btn:hover { transform: translateY(-3px) scale(1.025); }
+    .mode-bar {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: auto;
+      padding-bottom: 12px;
+    }
+    .mode-bar.hidden { display: none; }
+    .btn {
+      border: none;
+      border-radius: 10px;
+      padding: 12px 18px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #0b0d12;
+      background: var(--accent);
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.2s ease;
+      box-shadow: 0 10px 30px rgba(255,107,155,0.25);
+    }
+    .btn.secondary {
+      background: var(--accent-2);
+      box-shadow: 0 10px 30px rgba(90,200,250,0.22);
+    }
+    .btn.tertiary {
+      background: linear-gradient(135deg, #b97cff, #8b5cf6);
+      box-shadow: 0 10px 30px rgba(185,124,255,0.25);
+      color: #0b0d12;
+    }
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    .btn:hover:not(:disabled) { transform: translateY(-1px) scale(1.01); }
+    .panel {
+      background: var(--panel-bg);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 18px;
+      backdrop-filter: blur(6px);
+    }
+    .panel.hidden { display: none; }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .panel-title { font-size: 18px; font-weight: 700; }
+    .status { color: var(--text-sub); font-size: 14px; }
+    .track-list {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(360px, max-content);
+      gap: 14px;
+      overflow-x: auto;
+      padding: 6px 2px 12px;
+    }
+    .track-card {
+      position: relative;
+      padding: 14px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      cursor: pointer;
+      transition: transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      min-height: 120px;
+    }
+    .track-card:hover {
+      transform: scale(1.03);
+      border-color: rgba(255,255,255,0.2);
+      box-shadow: 0 12px 26px rgba(0,0,0,0.25);
+    }
+    .track-card.selected {
+      outline: 2px solid var(--accent);
+      box-shadow: 0 12px 26px rgba(255,107,155,0.3);
+    }
+    .track-content {
+      display: grid;
+      grid-template-columns: 1fr 160px;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .track-name { font-size: 16px; font-weight: 700; }
+    .track-meta { font-size: 13px; color: var(--text-sub); margin-top: 6px; }
+    .track-images {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+    }
+    .track-images img, .track-image-placeholder {
+      height: 120px;
+      width: 160px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, rgba(255,107,155,0.18), rgba(90,200,250,0.18));
+      border: 1px solid rgba(255,255,255,0.08);
+      object-fit: cover;
+    }
+    .track-image-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-sub);
+      font-size: 13px;
+      padding: 0 10px;
+    }
+    .preview {
+      margin-top: 10px;
+      padding: 14px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 12px;
+      border: 1px dashed rgba(255,255,255,0.08);
+    }
+    .summary-box {
+      margin-top: 10px;
+      padding: 12px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.06);
+      color: var(--text-main);
+      font-size: 14px;
+      line-height: 1.6;
+      font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+      white-space: pre-wrap;
+      max-height: 180px;
+      overflow: auto;
+    }
+    .preview-meta { font-size: 14px; color: var(--text-sub); }
+    .preview-images {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(256px, 1fr)); /* 缩到 4/5，保证一行放下更多图 */
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .preview-images img, .placeholder-box {
+      width: 100%;
+      height: 192px; /* 约为原来的 4/5 */
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(255,107,155,0.18), rgba(90,200,250,0.18));
+      border: 1px solid rgba(255,255,255,0.08);
+      object-fit: contain; /* 避免裁剪轴标题 */
+      padding: 6px;       /* 给坐标轴留白 */
+    }
+    .placeholder-box {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-sub);
+      font-size: 14px;
+    }
+    .action-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: rgba(8,10,18,0.82);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: var(--text-main);
+      font-size: 14px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    .toast.show { opacity: 1; }
+    @media (max-width: 720px) {
+      .content { padding: 32px 18px 20px; }
+      .track-list { grid-auto-columns: 170px; }
+      .mode-bar { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="main">
+    <div class="bg"></div>
+    <div class="scrim"></div>
+    <div class="content">
+      <div id="startOverlay" class="start-overlay">
+        <div class="start-title">Muse Dash On FPGA</div>
+        <div class="start-sub">点击任意位置开始</div>
+      </div>
+      <div id="modeChooser" class="mode-chooser hidden">
+        <button id="btn-choose-random" class="big-btn secondary">随机模式</button>
+        <button id="btn-choose-normal" class="big-btn">普通模式</button>
+      </div>
+      <div class="content-inner">
+        <div id="normalPanel" class="panel hidden">
+          <div class="panel-header">
+            <div class="panel-title">请选择谱面：</div>
+            <div id="normalStatus" class="status">等待加载谱面...</div>
+          </div>
+          <div id="trackList" class="track-list"></div>
+          <div class="action-row">
+            <button id="btn-select-normal" class="btn secondary">写入谱面信息</button>
+            <button id="btn-open-quartus" class="btn secondary">将谱面载入到 FPGA</button>
+            <button id="btn-play-normal" class="btn tertiary">软硬协同音乐播放</button>
+          </div>
+          <div class="preview">
+            <div id="previewMeta" class="preview-meta">将鼠标悬停在曲目卡片上即可放大并预览音乐。</div>
+            <div id="previewImages" class="preview-images"></div>
+            <pre id="previewData" class="summary-box">谱面信息生成中...</pre>
+          </div>
+        </div>
+
+        <div id="randomPanel" class="panel hidden">
+          <div class="panel-header">
+            <div class="panel-title">随机模式</div>
+            <div id="randomStatus" class="status">等待生成随机谱面...</div>
+          </div>
+          <div class="track-card" style="margin-top:6px;">
+            <div class="track-content">
+              <div class="track-info">
+                <div class="track-name">Random</div>
+                <div id="randomMeta" class="track-meta">BPM: -- · 时长: --:--</div>
+                <div class="track-meta">目录: charts/Random</div>
+              </div>
+              <div class="track-images">
+                <img id="randomCardImage" src="" alt="Random cover" />
+              </div>
+            </div>
+          </div>
+          <div class="action-row">
+            <button id="btn-generate-random" class="btn">重新生成</button>
+            <button id="btn-select-random" class="btn secondary">写入谱面信息</button>
+            <button id="btn-open-random" class="btn secondary">将谱面载入到 FPGA</button>
+            <button id="btn-play-random" class="btn tertiary">软硬协同音乐播放</button>
+          </div>
+          <div class="preview" style="margin-top:12px;">
+            <div class="preview-meta">谱面信息统计：</div>
+            <div id="randomPreview" class="preview-images"></div>
+            <pre id="randomData" class="summary-box">等待生成随机谱面分析数据</pre>
+          </div>
+        </div>
+
+        <div id="modeBar" class="mode-bar hidden">
+          <button id="btn-mode-random" class="btn secondary">随机模式</button>
+          <button id="btn-mode-normal" class="btn">普通模式</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>

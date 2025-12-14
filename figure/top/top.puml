@@ -1,0 +1,83 @@
+@startuml top
+title 总体关系：Web 前后端 -> Quartus -> FPGA
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam dpi 180
+skinparam defaultFontName "Microsoft YaHei"
+skinparam defaultFontSize 26
+skinparam TitleFontSize 38
+skinparam TitleFontStyle bold
+skinparam wrapWidth 320
+skinparam roundcorner 12
+skinparam padding 6
+skinparam ArrowThickness 2.5
+skinparam packageStyle rectangle
+skinparam componentStyle rectangle
+skinparam nodesep 18
+skinparam ranksep 20
+skinparam actorFontSize 30
+skinparam actorScale 2.0
+skinparam actorFontStyle bold
+skinparam rectangle<<pad>> {
+  BackgroundColor transparent
+  BorderColor transparent
+  FontColor transparent
+}
+
+' Arrow color groups (<= 3 colors)
+!define C_WEB 1565C0
+!define C_DATA 2E7D32
+!define C_HW EF6C00
+
+top to bottom direction
+actor "用户\n(开发者/玩家)" as USER
+node "PC / 浏览器" as PC {
+  component "前端 (Web)\nfrontend/index.html\nfrontend/app.js" as FE #FFF8E1
+}
+package "后端 (Python)\nserver.py (HTTP + helpers)" as BE #E3F2FD {
+  component "SVR\n(server.py)\nPOST /chart_engine/process\nPOST /chart_engine/generate_random\nPOST /chart_analysis/run\nPOST /music_sync/play|stop\nPOST /quartus/open" as SVR #E3F2FD
+  component "CHART_ENGINE\nchart_engine/chart_engine.py\n(生成 verilog/ROM.v\n+ 需要时更新 BPM)" as ENGINE #F3E5F5
+  component "CHART_ANALYSIS\nchart_analysis/chart_analysis.py\n(输出 *.png / *.json)" as ANALYSIS #E8F5E9
+  component "MUSIC_SYNC\nmusic_sync/player.py\n(PC 侧音频/节拍)" as MUSIC #E0F7FA
+}
+database "项目文件系统 (Workspace)\n- charts/<name>/<name>.txt (+.mp3)\n- chart_analysis/outputs/*\n- verilog/*.v + verilog/ROM.v\n- quartus/MuseDash.qpf/.qsf" as FS #F5F7FF
+node "Quartus Prime" as QUARTUS #FAFAFF {
+  component "编译/综合/布局布线/时序分析" as BUILD #FAFAFF
+  artifact "quartus/output_files/\nMuseDash.sof" as SOF
+}
+node "DE2-115 FPGA 开发板 (Cyclone IV E)" as FPGA #FFFDF4 {
+  component "核心逻辑\nMuseDash Top\nAddress_Generator\nQueue\nJudgement (FSM)\nScoreConversion\nAccumulator (BCD)" as HW #FFFDF4
+  component "外设/驱动\nTextLCD Driver\n7-Seg Driver\nDebouncer\nClk_Div" as IO #FFFDF4
+  HW -[hidden]right-> IO
+  rectangle "按键\n(clickup/clickdown/restart)" as BTN #FFFDF4
+  rectangle "TextLCD 1602" as LCD #FFFDF4
+  rectangle "7-Seg" as SEG #FFFDF4
+  ' rectangle "................................................" as FPGA_PAD <<pad>>
+  ' IO -[hidden]right-> FPGA_PAD
+}
+USER -[hidden]right-> PC
+PC -[hidden]right-> BE
+BE -[hidden]right-> FS
+USER -[#C_WEB]right-> FE : <color:#C_WEB>打开 UI</color>\n<color:#C_WEB>(选择模式/曲目)</color>
+FS -[hidden]left-> QUARTUS
+QUARTUS -[hidden]left-> FPGA
+FE -[#C_WEB]right-> SVR : <color:#C_WEB>HTTP 请求</color>\n<color:#C_WEB>(调用接口)</color>
+SVR -[#C_DATA]-> ANALYSIS : <color:#C_DATA>运行分析</color>
+ANALYSIS -[#C_DATA]-> FS : <color:#C_DATA>写入 outputs/*</color>\n<color:#C_DATA>(图表 + summary)</color>
+FS -[#C_WEB]left-> FE : <color:#C_WEB>UI 预览</color>\n<color:#C_WEB>(outputs/*)</color>
+SVR -[#C_DATA]-> ENGINE : <color:#C_DATA>处理/生成谱面</color>
+ENGINE -[#C_DATA]-> FS : <color:#C_DATA>写入 verilog/ROM.v</color>
+SVR -[#C_HW]-> FS : <color:#C_HW>打开 quartus 工程文件</color>\n<color:#C_HW>(辅助按钮)</color>
+USER -[#C_HW]down-> QUARTUS : <color:#C_HW>编译 / 下载</color>
+FS -[#C_HW]left-> QUARTUS : <color:#C_HW>工程文件 + HDL</color>
+BUILD -[#C_HW]-> SOF : <color:#C_HW>生成 .sof</color>
+SOF -[#C_HW]left-> FPGA : <color:#C_HW>下载到 FPGA</color>
+BTN -[#C_HW]-> HW : <color:#C_HW>输入</color>
+HW -[#C_HW]-> LCD : <color:#C_HW>谱面滚动显示</color>
+HW -[#C_HW]-> SEG : <color:#C_HW>分数 + 判定</color>
+note as ROMNOTE
+ROM.v 会作为可综合的“常量 ROM”：
+chart_engine 生成的谱面数据会被 FPGA 在运行时逐拍读取。
+end note
+FS -[hidden]right-> ROMNOTE
+@enduml
