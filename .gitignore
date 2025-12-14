@@ -39,3 +39,6 @@ chart_analysis/outputs/
 
 # Generated random chart
 charts/Random/Random.txt
+
+# Video
+videos/*.mp4
