@@ -41,4 +41,4 @@ chart_analysis/outputs/
 charts/Random/Random.txt
 
 # Video
-video/*.mp4
+*.mp4
