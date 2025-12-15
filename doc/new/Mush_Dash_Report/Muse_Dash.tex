@@ -11,6 +11,8 @@
 \usepackage{subcaption}
 \usepackage{graphicx}
 \usepackage{float}
+\usepackage{tabularx}
+
 
 % --- 代码高亮设置 (使用 listings，轻量级) ---
 \usepackage{listings}
@@ -48,7 +50,7 @@
     \Large \textbf{A Rhythm Game Architecture on FPGA} \\[2cm]
 
     \begin{center}
-    \Large
+    \large
     \textbf{小组成员：} \\[0.5cm] % 标题单独放
     \begin{tabular}{l l}        % {l l} 表示有两列，都是左对齐
         陈奕宽 & 25213040003 \\
@@ -103,42 +105,54 @@
 \end{itemize}
 
 \subsection{项目分工与协作模式}
-本项目采用了现代软件工程中的模块化与接口隔离设计模式，团队成员通过 Git 进行协作，通过标准化的 JSON 协议与 API 接口实现模块解耦。具体分工如下：
+本项目采用模块化与接口隔离的软件工程设计方法，团队成员通过 Git 进行协作，并基于标准化的 JSON 协议与 API 接口实现模块解耦。各成员的具体分工与职责如表~\ref{tab:team-division} 所示。
 
 \begin{table}[htbp]
     \centering
-    \begin{tabular}{l p{12cm}} 
-        
-        \textbf{陈之逸} & $\bullet$ \textbf{软件框架设计}：设计上位机交互逻辑，实现模式切换、Quartus 自动化调用及音频预览功能，完成系统框架搭建。 \newline
-                     $\bullet$ \textbf{Verilog编程与验证}：负责顶层模块的编写和全系统的上板校验。 \\[1.5ex] % [1.5ex] 增加行间距
-        
-        \textbf{陈奕宽} & $\bullet$ \textbf{Verilog编程与验证}：负责核心硬件模块的 RTL 设计与仿真。 \newline
-                     $\bullet$ \textbf{报告撰写与演示}：负责 LaTeX 实验报告的撰写，并制作答辩演示文稿并负责项目最终展示。 \\[1.5ex]
-        
-        \textbf{林炫达}  & $\bullet$ \textbf{谱面可视化分析}：实现 \texttt{chart\_analysis} 模块，开发谱面内容的深度统计逻辑与可视化绘图引擎。 \\[1.5ex]
-        
-        \textbf{薛文宵}  & $\bullet$ \textbf{谱面核心引擎}：负责 \texttt{chart\_engine} 模块，实现谱面校验、BPM 更新及随机谱面生成。 \\[1.5ex]
-        
-        \textbf{孟思思}  & $\bullet$ \textbf{音乐播放及软硬协同方案探索}：负责编写基于空格键的音乐播放代码，并探索了软硬协同播放音乐的多种方式。 \\
-        
-    \end{tabular}
+    \caption{项目成员分工与职责}
+    \label{tab:team-division}
+    {\footnotesize
+    \begin{tabularx}{\linewidth}{l X}
+    \textbf{陈之逸} &
+    \textbf{系统架构与软件框架设计}：负责项目整体技术架构与软硬件协同方案设计，构建完整的软件后端与上位机交互框架，独立完成全部前端实现，确保系统端到端流程。\\
+    &
+    \textbf{工程组织与集成验证}：负责仓库结构设计、工程构建与持续维护，制定模块化协作方式并进行 PR 审核与代码整合；完成顶层 Verilog 集成与全系统上板验证，保证软硬件接口联调正确与整体功能稳定。\\
+    &
+    \textbf{展示与交付}：制作项目演示视频，绘制系统架构图与机制示意图，对实验报告与答辩 PPT 进行整体检查与内容、版式优化，并参与项目最终演示。\\[1ex]
+
+    \textbf{陈奕宽} &
+    \textbf{核心硬件模块设计}：负责关键功能模块的 Verilog RTL 设计与仿真验证，确保模块功能正确性与可靠性。\\
+    &
+    \textbf{文档与答辩准备}：负责 LaTeX 实验报告的撰写与整理，制作项目答辩 PPT，并负责项目最终演示。\\[1ex]
+
+    \textbf{林炫达} &
+    \textbf{谱面分析与可视化}：实现 \texttt{chart\_analysis} 模块，设计谱面数据统计方法，完成谱面内容的分析逻辑与可视化绘图工具开发，为系统分析与展示提供支持。\\[1ex]
+
+    \textbf{薛文宵} &
+    \textbf{谱面核心引擎设计}：负责 \texttt{chart\_engine} 模块开发，实现谱面合法性校验、ROM.v 生成、BPM 更新及随机谱面生成等核心功能，支撑系统多模式运行。\\[1ex]
+
+    \textbf{孟思思} &
+    \textbf{音乐播放与软硬协同探索}：负责 \texttt{music\_sync} 模块开发，实现基础音乐播放功能（空格触发播放、无音频播放节拍），探索多种软硬协同实现方式，为系统功能扩展提供方案参考。
+    \end{tabularx}
+    }
 \end{table}
+
 
 \subsection{工具链}
 \begin{itemize}
-    \item \textbf{版本控制}：Github
-    \item \textbf{Verilog 编程}：VSCode + Vivado
+    \item \textbf{版本控制}：Github: https://github.com/RabbitEG/MuseDash
+    \item \textbf{Verilog 编程}：VSCode + Vivado + ModelSim
     \item \textbf{Python 编程}：VSCode
-    \item \textbf{行为级仿真}：Vivado
+    \item \textbf{行为级仿真}：Vivado + ModelSim
     \item \textbf{硬件验证}：DE2-115 开发板 + Quartus 平台
 \end{itemize}
 
-\section{整体框架}
+\subsection{整体框架}
 本项目构建了一个完整的软硬协同系统，其整体架构涵盖了用户交互层、后端处理层以及 FPGA 硬件层，通过 Web 前端、Python 后端服务器与 Quartus Prime 工具链实现了全流程的数据流转与控制。
 
 \begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.8\textwidth]{figure/top.png} 
+    \includegraphics[width=0.7\textwidth]{figure/top.png} 
     \caption{整体框架}
     \label{fig:top}
 \end{figure}
@@ -207,7 +221,7 @@
 \subsection{普通模式和随机模式流程}
 系统设计了两种主要的工作模式，分别对应不同的数据处理与交互逻辑，通过 Web 前端与 Python 后端的紧密配合实现。
 
-\subsubsection{普通模式 (Normal Mode)}
+\subsubsection{普通模式}
 在普通模式下，用户选择既有的曲目进行分析与游戏，具体数据流转流程如下：
 
 \begin{enumerate}
@@ -219,12 +233,12 @@
 
 \begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.8\textwidth]{figure/frontend_normal.png} 
+    \includegraphics[width=0.7\textwidth]{figure/frontend_normal.png} 
     \caption{普通模式前端流程图}
     \label{fig:frontend_normal}
 \end{figure}
 
-\subsubsection{随机模式 (Random Mode)}
+\subsubsection{随机模式}
 随机模式允许系统自动生成全新的谱面，流程包含额外的生成步骤：
 
 \begin{enumerate}
@@ -236,7 +250,7 @@
 
 \begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.8\textwidth]{figure/frontend_random.png} 
+    \includegraphics[width=0.7\textwidth]{figure/frontend_random.png} 
     \caption{随机模式前端流程图}
     \label{fig:frontend_random}
 \end{figure}
@@ -255,11 +269,11 @@
 \end{description}
 
 
-\subsection{谱面引擎模块(Chart Engine)}
+\subsection{谱面引擎模块}
 
 本章节详细阐述了谱面引擎的三个核心组件：谱面校验、随机生成以及 ROM 编译。
 
-\subsubsection{谱面校验函数 (chart\_check)}
+\subsubsection{谱面校验函数}
 
 \paragraph{功能概述}
 谱面校验函数是谱面引擎的基础组件，负责对谱面文件进行全面的格式检查和逻辑验证，确保谱面文件符合游戏引擎的要求。该函数在谱面生成、ROM 编译等关键流程中起到质量保障作用，能够有效防止因格式错误导致的系统异常。实现采用早期失败策略，一旦发现错误立即返回并输出详细的错误信息，包括错误类型、出错行号和具体错误值，这大大提高了问题定位的效率。
@@ -327,7 +341,7 @@ bpm=120
     \item 所有事件处理完成后，检查是否有未闭合的 \texttt{hold\_start}，如果有则返回错误，否则返回校验通过。
 \end{enumerate}
 
-\subsubsection{随机谱面生成函数 (generate\_random\_chart)}
+\subsubsection{随机谱面生成函数}
 
 \paragraph{功能概述}
 随机谱面生成函数实现了基于概率的随机谱面生成功能，能够根据指定的 BPM、时长、随机种子等参数自动生成符合格式要求的谱面文件。该函数采用基于节拍的循环生成策略，通过概率控制事件类型分布，生成包含单点事件和长条事件的随机谱面。支持随机种子功能，确保相同种子能够生成完全相同的谱面，这对于测试和调试具有重要意义。生成的谱面文件可以直接用于后续的校验和 ROM 编译流程。
@@ -351,7 +365,7 @@ bpm=120
 对于长条事件，首先生成一个 3 到 8 之间的随机数作为长条长度，然后生成两个额外的随机数用于决定是否在长条首尾添加额外的单点事件（这种设计增加了谱面的复杂度）。长条事件的生成采用循环方式，在循环的开始位置生成 \texttt{hold\_start}，在中间位置生成 \texttt{hold\_mid}，在结束位置生成最后一个 \texttt{hold\_mid}。长条生成完成后，更新节拍位置为当前位置加上事件间隔再加上长条长度减一。
 
 \paragraph{代码结构说明}
-核心函数是 \texttt{generate\_random\_chart(output\_dir, name="Random", bpm=120, length\_seconds=60, seed=None)}，接受输出目录、文件名、BPM、时长和随机种子作为参数，返回生成的文件路径或 None（表示失败）。
+核心函数是 \texttt{generate\_random\_chart}，接受输出目录、文件名、BPM、时长和随机种子作为参数，返回生成的文件路径或 None（表示失败）。
 
 函数首先设置随机种子（如果提供），这确保了相同种子能够生成相同的谱面。然后创建输出文件，如果目录不存在则自动创建。接下来计算总节拍数并初始化事件列表，列表的第一项为 BPM 声明行。
 
@@ -388,7 +402,7 @@ bpm=120
     \item 主循环结束后，将所有事件写入文件，如果写入失败则返回错误，否则返回生成的文件路径。
 \end{enumerate}
 
-\subsubsection{ROM 生成函数 (process\_chart)}
+\subsubsection{ROM 生成函数}
 
 \paragraph{功能概述}
 ROM 生成函数实现了从谱面文件到 Verilog ROM 模块的完整转换功能，是连接软件谱面设计和硬件实现的关键桥梁。该函数读取经过校验的谱面文件，解析其中的事件信息，将其转换为 FPGA 可用的 ROM 数据格式，并自动生成标准的 Verilog ROM 模块代码。同时，会提取谱面文件中的 BPM 值，计算相应的时钟分频系数，并自动更新顶层 Verilog 模块的 BPM 参数，确保硬件时钟与谱面节拍同步。生成的 ROM 模块可以直接用于 FPGA 综合和实现，大大简化了从谱面设计到硬件部署的流程。
@@ -482,7 +496,7 @@ endmodule
 
 整个流程确保了从谱面文件到硬件 ROM 模块的完整转换，同时实现了 BPM 参数的自动同步。
 
-\subsection{谱面可视化分析模块 (Chart Analysis)}
+\subsection{谱面可视化分析模块}
 \label{sec:chart_analysis}
 
 本模块是 MuseDash 项目的重要组成部分，旨在对游戏谱面进行全面的统计分析与可视化展示。该模块能够自动扫描项目中的谱面目录，解析谱面文件，提取关键信息，并生成多种类型的统计图表和数据摘要，为谱面设计、难度评估和数据分析提供有力支持。
@@ -648,7 +662,7 @@ endmodule
 
 
 
-\subsection{音乐播放模块(Music Sync)}
+\subsection{音乐播放模块}
 
 \subsubsection{监听键盘及音乐播放}
 
