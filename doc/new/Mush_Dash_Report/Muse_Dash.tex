@@ -89,7 +89,7 @@
 本项目复刻了知名节奏游戏 \textbf{Muse Dash（喵斯快跑）} 的核心玩法。
 \begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.6\textwidth]{figure/musedashicon.jpg} 
+    \includegraphics[width=0.4\textwidth]{figure/musedashicon.jpg} 
     \caption{Muse Dash}
     \label{fig:musedashicon}
 \end{figure}
@@ -155,6 +155,13 @@
     \item \textbf{Quartus Prime 与 FPGA}：Quartus Prime 负责对项目工程文件进行编译、综合、布局布线及时序分析，最终生成 \texttt{.sof} 配置文件并下载到 DE2-115 FPGA 开发板。FPGA 硬件端包含了核心逻辑（如地址生成、队列管理、判定状态机、分数累加等）及外设驱动（TextLCD 1602 显示谱面、7-Seg 数码管显示分数与判定），通过读取后端生成的 \texttt{ROM.v} 数据实现游戏运行 。
 \end{itemize}
 
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figure/Board.png} 
+    \caption{DE2-115界面}
+    \label{fig:Board}
+\end{figure}
+
 \section{软件设计}
 
 \subsection{软件界面展示}
@@ -210,7 +217,7 @@
     \item \textbf{播放启动}：最后，前端发送 \texttt{POST /music\_sync/play} 请求，后端 \texttt{PLAYER} 模块启动音频播放，标志着游戏的开始。
 \end{enumerate}
 
-\begin{figure}[H]
+\begin{figure}[htbp]
     \centering
     \includegraphics[width=0.8\textwidth]{figure/frontend_normal.png} 
     \caption{普通模式前端流程图}
@@ -701,7 +708,7 @@ endmodule
 
 \begin{figure}[htbp]
     \centering
-    \includegraphics[width=1.0\textwidth]{figure/hardware_top.png} 
+    \includegraphics[width=0.8\textwidth]{figure/hardware_top.png} 
     \caption{顶层模块架构图}
     \label{fig:hardware_top}
 \end{figure}
@@ -828,7 +835,7 @@ DE2-115 开发板上的七段数码管由独立引脚控制，因此，我们使
 
 \begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.7\textwidth]{figure/FSM.png} 
+    \includegraphics[width=0.8\textwidth]{figure/FSM.png} 
     \caption{判定逻辑的状态转移图}
     \label{fig:FSM}
 \end{figure}
@@ -901,7 +908,7 @@ DE2-115 开发板上的七段数码管由独立引脚控制，因此，我们使
 \end{itemize}
 
 \subsection{信号穿透}
-这是一个关键问题。\texttt{cur\_note} 信号在切换时会出现毛刺（Glitch），导致 HOLD\_MIDDLE 信号在时钟偏差下“穿透”到前一个周期，造成错误判定。
+这是一个关键问题：\texttt{cur\_note} 信号在切换时会出现毛刺，导致 HOLD\_MIDDLE 信号在时钟偏差下“穿透”到前一个周期，造成错误判定。
 \textbf{解决方案}：在判定区间的中间点，强制将状态置为 \textbf{NO\_NOTE} 一次。这相当于一次软复位，阻断了错误信号的传播。
 
 \subsection{软硬件不一致性}
